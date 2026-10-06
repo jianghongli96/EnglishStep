@@ -7,6 +7,7 @@ import { WordAudioButton } from "@/components/learning/word-audio-button";
 import { loadCurrentAccount } from "@/lib/account";
 import { api } from "@/lib/api";
 import { getQuestionSpeakWord } from "@/lib/speech";
+import { gradeLabel } from "@/lib/student-options";
 import type {
   AccountPayload,
   DailyPlan,
@@ -495,7 +496,7 @@ export function LearningApp({
               {account
                 ? `${account.user.name} · ${account.user.role}`
                 : student
-                  ? `${student.name} · ${student.grade}`
+                  ? `${student.name} · ${gradeLabel(student.grade)}`
                   : "连接后端中"}
             </span>
             <a

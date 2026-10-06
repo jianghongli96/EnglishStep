@@ -1,7 +1,7 @@
 export type Student = {
   id: string;
   name: string;
-  grade: string;
+  grade: number | string;
   level: string;
 };
 
@@ -138,7 +138,7 @@ export type AccountUser = {
 
 export type StudentProfile = {
   userId: string;
-  grade: string;
+  grade: number | string;
   level: string;
   currentBook?: string;
   createdAt?: string;

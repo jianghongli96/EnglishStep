@@ -61,7 +61,7 @@ export async function registerAccount({
   password: string;
   name: string;
   role: AccountRole;
-  grade?: string;
+  grade?: number | string;
   level?: string;
 }) {
   const payload = await api<AccountPayload>("/api/accounts/register", {

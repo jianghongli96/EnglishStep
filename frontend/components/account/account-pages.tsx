@@ -10,6 +10,11 @@ import {
   registerAccount,
 } from "@/lib/account";
 import { api } from "@/lib/api";
+import {
+  gradeLabel,
+  gradeOptions,
+  levelOptions,
+} from "@/lib/student-options";
 import type { AccountPayload, AccountRole, TeacherGroup } from "@/lib/types";
 
 function roleLabel(role: string) {
@@ -121,8 +126,8 @@ export function RegisterPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [grade, setGrade] = useState("");
-  const [level, setLevel] = useState("");
+  const [grade, setGrade] = useState<number>(7);
+  const [level, setLevel] = useState("low");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -196,21 +201,33 @@ export function RegisterPage() {
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm font-semibold">
               年级
-              <input
+              <select
                 value={grade}
-                onChange={(event) => setGrade(event.target.value)}
+                onChange={(event) => setGrade(Number(event.target.value))}
                 required
                 className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
-              />
+              >
+                {gradeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="block text-sm font-semibold">
               基础水平
-              <input
+              <select
                 value={level}
                 onChange={(event) => setLevel(event.target.value)}
                 required
                 className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
-              />
+              >
+                {levelOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
         ) : null}
@@ -453,7 +470,8 @@ export function AccountPage() {
           <div className="mt-4 space-y-2">
             {(account.children || []).map((child) => (
               <p key={child.user.id} className="rounded-md bg-background p-3 text-sm">
-                {child.user.name} · {child.profile?.grade} · ID：{child.user.id}
+                {child.user.name} · {gradeLabel(child.profile?.grade)} · ID：
+                {child.user.id}
               </p>
             ))}
           </div>
