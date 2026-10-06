@@ -1,0 +1,78 @@
+name: Deploy EnglishLearning
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      prune:
+        description: "Delete remote files that no longer exist in the repository"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: english-learning-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Aliyun
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy script
+        run: bash -n scripts/deploy.sh
+
+      - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.ALIYUN_HOST }}
+          SSH_USER: ${{ secrets.ALIYUN_USER }}
+          SSH_PORT: ${{ secrets.ALIYUN_PORT || '22' }}
+          SSH_PRIVATE_KEY: ${{ secrets.ALIYUN_SSH_KEY }}
+        run: |
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$SSH_PRIVATE_KEY"
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/aliyun_deploy_key
+          chmod 600 ~/.ssh/aliyun_deploy_key
+
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          cat > ~/.ssh/config <<EOF
+          Host aliyun-deploy
+            HostName $SSH_HOST
+            User $SSH_USER
+            Port $SSH_PORT
+            IdentityFile ~/.ssh/aliyun_deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Deploy
+        env:
+          SSH_TARGET: aliyun-deploy
+          REMOTE_DIR: ${{ vars.REMOTE_DIR || '/var/www/english-learning' }}
+          NODE_BIN_DIR: ${{ vars.NODE_BIN_DIR || '/opt/node-v24.11.0-linux-x64/bin' }}
+          BACKEND_APP: english-learning-backend
+          FRONTEND_APP: english-learning-frontend
+          FRONTEND_HOST: 127.0.0.1
+          FRONTEND_PORT: "4011"
+          PRUNE: ${{ github.event.inputs.prune || 'false' }}
+        run: |
+          args=()
+          if [[ "$PRUNE" == "true" ]]; then
+            args+=(--prune)
+          fi
+          ./scripts/deploy.sh "${args[@]}"

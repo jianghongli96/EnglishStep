@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "基础英语练习站",
     description: "词汇、语法、阅读和错题复习组成的低门槛英语练习台。",
-    images: ["/study-banner.png"],
+    images: ["/study-banner.webp"],
   },
 };
 

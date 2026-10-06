@@ -1,0 +1,119 @@
+{
+  "students": [],
+  "attempts": [],
+  "mistakes": [],
+  "questions": [
+    {
+      "id": "w-borrow-001",
+      "module": "words",
+      "type": "choice",
+      "prompt": "Choose the meaning of \"borrow\".",
+      "options": ["归还", "借入", "购买", "丢失"],
+      "answer": "借入",
+      "explain": "borrow 表示“借入”，常见搭配是 borrow sth. from sb.。",
+      "grade": "初中",
+      "difficulty": 1,
+      "knowledgePoint": "高频动词"
+    },
+    {
+      "id": "w-enough-001",
+      "module": "words",
+      "type": "choice",
+      "prompt": "Which word means “足够的”?",
+      "options": ["early", "enough", "every", "empty"],
+      "answer": "enough",
+      "explain": "enough 可以作形容词或副词，表示“足够的/足够地”。",
+      "grade": "初中",
+      "difficulty": 1,
+      "knowledgePoint": "形容词"
+    },
+    {
+      "id": "w-healthy-001",
+      "module": "words",
+      "type": "choice",
+      "prompt": "Which word completes the sentence? Eating vegetables is ____.",
+      "options": ["healthy", "heavy", "hungry", "helpful"],
+      "answer": "healthy",
+      "explain": "healthy 表示“健康的”，句子意思是“吃蔬菜是健康的”。",
+      "grade": "初中",
+      "difficulty": 1,
+      "knowledgePoint": "生活词汇"
+    },
+    {
+      "id": "g-have-001",
+      "module": "grammar",
+      "type": "choice",
+      "prompt": "My sister ____ a new bike.",
+      "options": ["have", "has", "is", "are"],
+      "answer": "has",
+      "explain": "主语 My sister 是第三人称单数，一般现在时用 has。",
+      "grade": "初中",
+      "difficulty": 1,
+      "knowledgePoint": "一般现在时"
+    },
+    {
+      "id": "g-therebe-001",
+      "module": "grammar",
+      "type": "choice",
+      "prompt": "There ____ some milk in the glass.",
+      "options": ["is", "are", "am", "be"],
+      "answer": "is",
+      "explain": "milk 是不可数名词，There be 句型中 be 动词用 is。",
+      "grade": "初中",
+      "difficulty": 1,
+      "knowledgePoint": "There be 句型"
+    },
+    {
+      "id": "g-past-001",
+      "module": "grammar",
+      "type": "choice",
+      "prompt": "We ____ to the library yesterday.",
+      "options": ["go", "goes", "went", "going"],
+      "answer": "went",
+      "explain": "yesterday 表示过去时间，go 的过去式是 went。",
+      "grade": "初中",
+      "difficulty": 2,
+      "knowledgePoint": "一般过去时"
+    },
+    {
+      "id": "r-plan-001",
+      "module": "reading",
+      "type": "choice",
+      "title": "A Small English Plan",
+      "passage": "Li Ming is in Grade Eight. English is difficult for him, so he starts with small steps. Every morning, he listens to one short sentence and reads it aloud. After school, he reviews five words and writes two simple sentences. After two weeks, he can understand more in class.",
+      "vocabulary": ["difficult 困难的", "small steps 小步骤", "review 复习"],
+      "prompt": "What is the passage mainly about?",
+      "options": [
+        "A student buys a new phone.",
+        "A student starts a simple English plan.",
+        "A teacher visits a family.",
+        "A class goes to the park."
+      ],
+      "answer": "A student starts a simple English plan.",
+      "explain": "短文围绕 Li Ming 每天听一句、背五个词、读一小段展开。",
+      "grade": "初中",
+      "difficulty": 1,
+      "knowledgePoint": "主旨理解"
+    },
+    {
+      "id": "r-club-001",
+      "module": "reading",
+      "type": "choice",
+      "title": "The English Club",
+      "passage": "Anna joins an English club on Friday afternoon. The teacher asks every student to say one sentence about the week. Anna says, \"I learned three new words.\" Her friends clap for her. She feels happy and wants to speak again next week.",
+      "vocabulary": ["join 加入", "clap 鼓掌", "again 再一次"],
+      "prompt": "Why does Anna feel happy?",
+      "options": [
+        "Her friends clap for her.",
+        "She has no homework.",
+        "She buys a book.",
+        "The club is closed."
+      ],
+      "answer": "Her friends clap for her.",
+      "explain": "文中提到朋友为 Anna 鼓掌，所以她感到开心。",
+      "grade": "初中",
+      "difficulty": 1,
+      "knowledgePoint": "细节理解"
+    }
+  ]
+}
