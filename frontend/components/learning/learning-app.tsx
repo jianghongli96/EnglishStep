@@ -93,6 +93,7 @@ export function LearningApp({
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
   const autoStartedRef = useRef(false);
+  const practiceProfileRefreshRef = useRef(false);
 
   const activeQuestions = useMemo(() => {
     if (
@@ -245,6 +246,13 @@ export function LearningApp({
     }));
   }
 
+  function refreshProfileAfterPractice() {
+    if (!student || practiceProfileRefreshRef.current) return;
+
+    practiceProfileRefreshRef.current = true;
+    loadProfile(student.id).catch(() => null);
+  }
+
   async function answerQuestion(question: PracticeItem, option: string) {
     if (!student) return;
 
@@ -270,7 +278,6 @@ export function LearningApp({
       }));
       setProgress(response.progress);
       setMistakes(response.mistakes);
-      await loadProfile(student.id);
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "答题提交失败。");
     }
@@ -309,6 +316,7 @@ export function LearningApp({
       setDailySelected("");
       setDailyCorrect(0);
       setDailyWrong(0);
+      practiceProfileRefreshRef.current = false;
       setPracticeKind("daily");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "今日任务加载失败。");
@@ -338,6 +346,7 @@ export function LearningApp({
       setDailySelected("");
       setDailyCorrect(0);
       setDailyWrong(0);
+      practiceProfileRefreshRef.current = false;
       setPracticeKind("mistakes");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "错题训练加载失败。");
@@ -365,6 +374,7 @@ export function LearningApp({
       setDailySelected("");
       setDailyCorrect(0);
       setDailyWrong(0);
+      practiceProfileRefreshRef.current = false;
       setPracticeKind(module);
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "专项练习加载失败。");
@@ -394,7 +404,6 @@ export function LearningApp({
 
       setProgress(response.progress);
       setMistakes(response.mistakes);
-      await loadProfile(student.id);
 
       if (response.result.correct) {
         setDailyCorrect((count) => count + 1);
@@ -411,16 +420,18 @@ export function LearningApp({
   function goToNextDailyQuestion() {
     setDailyFeedback(null);
     setDailySelected("");
-    setDailyIndex((index) => Math.min(index + 1, dailyQueue.length));
+    const nextIndex = Math.min(dailyIndex + 1, dailyQueue.length);
+    setDailyIndex(nextIndex);
+    if (nextIndex >= dailyQueue.length) {
+      refreshProfileAfterPractice();
+    }
   }
 
   function exitDailyPractice() {
     setPracticeKind(null);
     setDailyFeedback(null);
     setDailySelected("");
-    if (student) {
-      loadProfile(student.id).catch(() => null);
-    }
+    refreshProfileAfterPractice();
   }
 
   async function importVocabulary() {
