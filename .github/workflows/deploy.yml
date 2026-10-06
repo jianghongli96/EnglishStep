@@ -70,6 +70,7 @@ jobs:
           FRONTEND_APP: english-learning-frontend
           FRONTEND_HOST: 127.0.0.1
           FRONTEND_PORT: "4011"
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || 'same-origin' }}
           PRUNE: ${{ github.event.inputs.prune || 'false' }}
         run: |
           args=()

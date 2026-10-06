@@ -8,6 +8,7 @@ BACKEND_APP="${BACKEND_APP:-english-learning-backend}"
 FRONTEND_APP="${FRONTEND_APP:-english-learning-frontend}"
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 FRONTEND_PORT="${FRONTEND_PORT:-4011}"
+NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-same-origin}"
 UPLOAD_DB=false
 DRY_RUN=false
 PRUNE_REMOTE=false
@@ -29,6 +30,8 @@ Environment overrides:
   REMOTE_DIR     Server project directory. Default: /var/www/english-learning
   NODE_BIN_DIR   Server Node.js bin directory. Default: /opt/node-v24.11.0-linux-x64/bin
   FRONTEND_PORT  Internal frontend port. Default: 4011
+  NEXT_PUBLIC_API_BASE_URL
+                Frontend API base URL. Default: same-origin
 USAGE
 }
 
@@ -122,6 +125,7 @@ fi
 
 ssh "$SSH_TARGET" "set -e
 export PATH='$NODE_BIN_DIR':\$PATH
+export NEXT_PUBLIC_API_BASE_URL='$NEXT_PUBLIC_API_BASE_URL'
 cd '$REMOTE_DIR/frontend'
 yarn install
 yarn build
