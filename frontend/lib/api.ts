@@ -1,5 +1,8 @@
+const env = import.meta.env as Record<string, string | undefined>;
 const configuredApiBase =
-  typeof process === "undefined" ? "" : process.env.NEXT_PUBLIC_API_BASE_URL || "";
+  env.NEXT_PUBLIC_API_BASE_URL ||
+  env.VITE_API_BASE_URL ||
+  (typeof process === "undefined" ? "" : process.env.NEXT_PUBLIC_API_BASE_URL || "");
 const API_BASE = configuredApiBase === "same-origin" ? "" : configuredApiBase;
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
