@@ -9,5 +9,8 @@
     "start:backend": "node backend/src/server.js",
     "deploy": "bash scripts/deploy.sh",
     "deploy:with-db": "bash scripts/deploy.sh --with-db"
+  },
+  "volta": {
+    "node": "22.14.0"
   }
 }

@@ -2,7 +2,8 @@ const env = import.meta.env as Record<string, string | undefined>;
 const configuredApiBase =
   env.NEXT_PUBLIC_API_BASE_URL ||
   env.VITE_API_BASE_URL ||
-  (typeof process === "undefined" ? "" : process.env.NEXT_PUBLIC_API_BASE_URL || "");
+  (typeof process === "undefined" ? "" : process.env.NEXT_PUBLIC_API_BASE_URL || "") ||
+  "same-origin";
 const API_BASE = configuredApiBase === "same-origin" ? "" : configuredApiBase;
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -15,6 +16,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       ? ""
       : window.localStorage.getItem("englishLearning.authToken") || "";
   const response = await fetch(`${API_BASE}${path}`, {
+    cache: "no-store",
     ...init,
     headers: {
       "content-type": "application/json",

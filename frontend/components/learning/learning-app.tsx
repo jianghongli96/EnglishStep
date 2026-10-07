@@ -25,13 +25,55 @@ import type {
 } from "@/lib/types";
 
 const modules = [
-  { id: "daily", name: "今日任务", detail: "10-20 分钟完成一个小闭环", href: "/" },
-  { id: "words", name: "词汇练习", detail: "先学词，再做题", href: "/vocabulary" },
-  { id: "grammar", name: "语法基础", detail: "先理解，再做题巩固", href: "/practice/grammar" },
-  { id: "reading", name: "分级阅读", detail: "短文 + 生词 + 题目解析", href: "/practice/reading" },
-  { id: "mistakes", name: "错题本", detail: "自动收集薄弱点", href: "/mistakes" },
-  { id: "parent", name: "家长查看", detail: "最近学习表现", href: "/parent" },
-  { id: "admin", name: "词库管理", detail: "导入词汇并自动生成题目", href: "/admin/vocabulary" },
+  {
+    id: "daily",
+    name: "今日任务",
+    detail: "10-20 分钟完成一个小闭环",
+    href: "/",
+    roles: ["student"],
+  },
+  {
+    id: "words",
+    name: "词汇练习",
+    detail: "先学词，再做题",
+    href: "/vocabulary",
+    roles: ["student"],
+  },
+  {
+    id: "grammar",
+    name: "语法基础",
+    detail: "先理解，再做题巩固",
+    href: "/practice/grammar",
+    roles: ["student"],
+  },
+  {
+    id: "reading",
+    name: "分级阅读",
+    detail: "短文 + 生词 + 题目解析",
+    href: "/practice/reading",
+    roles: ["student"],
+  },
+  {
+    id: "mistakes",
+    name: "错题本",
+    detail: "自动收集薄弱点",
+    href: "/mistakes",
+    roles: ["student"],
+  },
+  {
+    id: "parent",
+    name: "家长查看",
+    detail: "最近学习表现",
+    href: "/parent",
+    roles: ["parent"],
+  },
+  {
+    id: "admin",
+    name: "词库管理",
+    detail: "导入词汇并自动生成题目",
+    href: "/admin/vocabulary",
+    roles: ["admin"],
+  },
 ] as const;
 
 const moduleLabels: Record<string, string> = {
@@ -52,6 +94,21 @@ enough,足够的,adj,We have enough time.,八年级,人教版,Unit 2,1,形容词
 healthy,健康的,adj,Eating vegetables is healthy.,七年级,人教版,Unit 6,1,生活词汇`;
 
 type ModuleId = (typeof modules)[number]["id"];
+type ModuleRole = (typeof modules)[number]["roles"][number];
+
+function canRoleViewModule(role: string | undefined, moduleId: ModuleId) {
+  const module = modules.find((item) => item.id === moduleId);
+  return Boolean(role && module?.roles.includes(role as ModuleRole));
+}
+
+function childToStudent(child: NonNullable<AccountPayload["children"]>[number]) {
+  return {
+    id: child.user.id,
+    name: child.user.name,
+    grade: child.profile.grade,
+    level: child.profile.level,
+  };
+}
 
 export function LearningApp({
   initialModule = "daily",
@@ -94,6 +151,12 @@ export function LearningApp({
   const [apiError, setApiError] = useState("");
   const autoStartedRef = useRef(false);
   const practiceProfileRefreshRef = useRef(false);
+  const currentRole = account?.user.role;
+  const visibleModules = useMemo(
+    () => modules.filter((module) => module.roles.includes(currentRole as ModuleRole)),
+    [currentRole],
+  );
+  const canViewActiveModule = canRoleViewModule(currentRole, activeModule);
 
   const activeQuestions = useMemo(() => {
     if (
@@ -130,17 +193,37 @@ export function LearningApp({
       try {
         const currentAccount = await loadCurrentAccount().catch(() => null);
         setAccount(currentAccount);
-        if (currentAccount?.user.role !== "student" || !currentAccount.student) {
-          setApiError("请先登录学生账号，再进入学习首页。");
+        if (!currentAccount) {
+          setApiError("请先登录账号。");
           return;
         }
 
-        setStudent(currentAccount.student);
-        await Promise.all([
-          loadProfile(currentAccount.student.id),
-          loadQuestions(currentAccount.student.id, "words"),
-          loadQuestions(currentAccount.student.id, "reading"),
-        ]);
+        if (currentAccount.user.role === "student") {
+          if (!currentAccount.student) {
+            setApiError("学生档案不完整，请重新登录或检查账号。");
+            return;
+          }
+
+          setStudent(currentAccount.student);
+          await Promise.all([
+            loadProfile(currentAccount.student.id),
+            loadQuestions(currentAccount.student.id, "words"),
+            loadQuestions(currentAccount.student.id, "reading"),
+          ]);
+          return;
+        }
+
+        if (currentAccount.user.role === "parent") {
+          const firstChild = currentAccount.children?.[0];
+          if (firstChild) {
+            const childStudent = childToStudent(firstChild);
+            setStudent(childStudent);
+            if (initialModule === "parent") {
+              await loadParentReport(childStudent.id);
+            }
+          }
+          return;
+        }
       } catch (error) {
         setApiError(
           error instanceof Error
@@ -162,6 +245,7 @@ export function LearningApp({
   useEffect(() => {
     if (
       !student ||
+      !canViewActiveModule ||
       activeModule === "daily" ||
       activeModule === "mistakes" ||
       activeModule === "parent" ||
@@ -174,24 +258,38 @@ export function LearningApp({
     loadQuestions(student.id, activeModule).catch((error) => {
       setApiError(error instanceof Error ? error.message : "题目加载失败。");
     });
-  }, [activeModule, questionsByModule, student]);
+  }, [activeModule, canViewActiveModule, questionsByModule, student]);
 
   useEffect(() => {
-    if (!student || activeModule !== "words" || studyVocabulary.length > 0) return;
+    if (
+      !student ||
+      !canViewActiveModule ||
+      activeModule !== "words" ||
+      studyVocabulary.length > 0
+    ) {
+      return;
+    }
     loadStudyVocabulary(student.id).catch((error) => {
       setApiError(error instanceof Error ? error.message : "词汇学习内容加载失败。");
     });
-  }, [activeModule, student, studyVocabulary.length]);
+  }, [activeModule, canViewActiveModule, student, studyVocabulary.length]);
 
   useEffect(() => {
-    if (!student || activeModule !== "parent") return;
+    if (!student || !canViewActiveModule || activeModule !== "parent") return;
     loadParentReport(student.id).catch((error) => {
       setApiError(error instanceof Error ? error.message : "家长报告加载失败。");
     });
-  }, [activeModule, student]);
+  }, [activeModule, canViewActiveModule, student]);
 
   useEffect(() => {
-    if (!student || !autoStartPractice || autoStartedRef.current) return;
+    if (
+      !student ||
+      !canViewActiveModule ||
+      !autoStartPractice ||
+      autoStartedRef.current
+    ) {
+      return;
+    }
 
     autoStartedRef.current = true;
     if (autoStartPractice === "daily") {
@@ -203,7 +301,7 @@ export function LearningApp({
       return;
     }
     void startModulePractice(autoStartPractice);
-  }, [autoStartPractice, student]);
+  }, [autoStartPractice, canViewActiveModule, student]);
 
   async function loadProfile(studentId: string) {
     const profile = await api<{
@@ -253,6 +351,19 @@ export function LearningApp({
     loadProfile(student.id).catch(() => null);
   }
 
+  function preparePracticeStart() {
+    setPracticeKind(null);
+    setDailyQueue([]);
+    setDailyIndex(0);
+    setDailyFeedback(null);
+    setDailySelected("");
+    setDailyCorrect(0);
+    setDailyWrong(0);
+    practiceProfileRefreshRef.current = false;
+    setDailyLoading(true);
+    setApiError("");
+  }
+
   async function answerQuestion(question: PracticeItem, option: string) {
     if (!student) return;
 
@@ -300,8 +411,7 @@ export function LearningApp({
   async function startDailyPractice() {
     if (!student) return;
 
-    setDailyLoading(true);
-    setApiError("");
+    preparePracticeStart();
 
     try {
       const response = await api<{ plan: DailyPlan }>(
@@ -311,12 +421,6 @@ export function LearningApp({
 
       setDailyQueue(queue);
       setDailyTasks(response.plan.tasks);
-      setDailyIndex(0);
-      setDailyFeedback(null);
-      setDailySelected("");
-      setDailyCorrect(0);
-      setDailyWrong(0);
-      practiceProfileRefreshRef.current = false;
       setPracticeKind("daily");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "今日任务加载失败。");
@@ -328,8 +432,7 @@ export function LearningApp({
   async function startMistakePractice() {
     if (!student) return;
 
-    setDailyLoading(true);
-    setApiError("");
+    preparePracticeStart();
 
     try {
       const response = await api<{ mistakes: Mistake[] }>(
@@ -341,12 +444,6 @@ export function LearningApp({
 
       setMistakes(response.mistakes);
       setDailyQueue(shuffleQuestions(queue));
-      setDailyIndex(0);
-      setDailyFeedback(null);
-      setDailySelected("");
-      setDailyCorrect(0);
-      setDailyWrong(0);
-      practiceProfileRefreshRef.current = false;
       setPracticeKind("mistakes");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "错题训练加载失败。");
@@ -358,8 +455,7 @@ export function LearningApp({
   async function startModulePractice(module: "words" | "grammar" | "reading") {
     if (!student) return;
 
-    setDailyLoading(true);
-    setApiError("");
+    preparePracticeStart();
 
     const limit = module === "reading" ? 5 : 10;
 
@@ -369,12 +465,6 @@ export function LearningApp({
       );
 
       setDailyQueue(shuffleQuestions(response.questions));
-      setDailyIndex(0);
-      setDailyFeedback(null);
-      setDailySelected("");
-      setDailyCorrect(0);
-      setDailyWrong(0);
-      practiceProfileRefreshRef.current = false;
       setPracticeKind(module);
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "专项练习加载失败。");
@@ -503,60 +593,68 @@ export function LearningApp({
             </h1>
           </div>
           <div className="hidden items-center gap-2 sm:flex">
-            <span className="rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
-              {account
-                ? `${account.user.name} · ${account.user.role}`
-                : student
-                  ? `${student.name} · ${gradeLabel(student.grade)}`
-                  : "连接后端中"}
-            </span>
+            {account ? (
+              <span className="rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+                {account.user.name} · {account.user.role}
+              </span>
+            ) : null}
             <a
               href={account ? "/account" : "/login"}
               className="rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50"
             >
               {account ? "账号" : "登录"}
             </a>
-            <button
-              type="button"
-              onClick={startDailyPractice}
-              disabled={!student || dailyLoading}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {dailyLoading ? "准备中" : "开始 15 分钟"}
-            </button>
+            {currentRole === "student" ? (
+              <button
+                type="button"
+                onClick={startDailyPractice}
+                disabled={!student || dailyLoading}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {dailyLoading ? "准备中" : "开始 15 分钟"}
+              </button>
+            ) : null}
           </div>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)_300px] lg:px-8">
-        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
-          <nav className="grid gap-2" aria-label="学习模块">
-            {modules.map((module) => (
-              <a
-                key={module.id}
-                href={module.href}
-                className={`rounded-md border px-4 py-3 text-left transition ${
-                  activeModule === module.id
-                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                    : "border-border bg-card hover:border-primary/45"
-                }`}
-              >
-                <span className="block text-sm font-semibold">
-                  {module.name}
-                </span>
-                <span
-                  className={`mt-1 block text-xs ${
+      <div
+        className={`mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:px-8 ${
+          account
+            ? "lg:grid-cols-[260px_minmax(0,1fr)_300px]"
+            : "lg:grid-cols-1"
+        }`}
+      >
+        {visibleModules.length > 0 ? (
+          <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
+            <nav className="grid gap-2" aria-label="学习模块">
+              {visibleModules.map((module) => (
+                <a
+                  key={module.id}
+                  href={module.href}
+                  className={`rounded-md border px-4 py-3 text-left transition ${
                     activeModule === module.id
-                      ? "text-primary-foreground/78"
-                      : "text-muted-foreground"
+                      ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                      : "border-border bg-card hover:border-primary/45"
                   }`}
                 >
-                  {module.detail}
-                </span>
-              </a>
-            ))}
-          </nav>
-        </aside>
+                  <span className="block text-sm font-semibold">
+                    {module.name}
+                  </span>
+                  <span
+                    className={`mt-1 block text-xs ${
+                      activeModule === module.id
+                        ? "text-primary-foreground/78"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {module.detail}
+                  </span>
+                </a>
+              ))}
+            </nav>
+          </aside>
+        ) : null}
 
         <section className="space-y-5">
           <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
@@ -587,13 +685,13 @@ export function LearningApp({
             </div>
           ) : null}
 
-          {!loading && !student ? (
+          {!loading && !account ? (
             <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
               <h2 className="text-2xl font-bold tracking-tight">
-                请先登录学生账号
+                请先登录账号
               </h2>
               <p className="mt-3 text-sm text-muted-foreground">
-                登录后可以查看今日任务、练习记录和错题复习。
+                登录后会根据账号身份显示可访问的学习或管理页面。
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <a
@@ -606,9 +704,18 @@ export function LearningApp({
                   href="/register"
                   className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold"
                 >
-                  注册学生账号
+                  注册账号
                 </a>
               </div>
+            </section>
+          ) : null}
+
+          {!loading && account && !canViewActiveModule ? (
+            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+              <h2 className="text-2xl font-bold tracking-tight">没有访问权限</h2>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                当前账号身份是 {account.user.role}，不能访问这个页面。请从左侧菜单进入当前身份可用的模块。
+              </p>
             </section>
           ) : null}
 
@@ -623,7 +730,7 @@ export function LearningApp({
             </section>
           ) : null}
 
-          {activeModule === "daily" && !loading && student ? (
+          {activeModule === "daily" && !loading && student && canViewActiveModule ? (
             <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
@@ -675,9 +782,10 @@ export function LearningApp({
             </section>
           ) : null}
 
-          {activeModule === "words" ||
-          activeModule === "grammar" ||
-          activeModule === "reading" ? (
+          {canViewActiveModule &&
+          (activeModule === "words" ||
+            activeModule === "grammar" ||
+            activeModule === "reading") ? (
             <>
               <ModuleOverview
                 module={activeModule}
@@ -705,7 +813,7 @@ export function LearningApp({
             </>
           ) : null}
 
-          {activeModule === "admin" ? (
+          {canViewActiveModule && activeModule === "admin" ? (
             <AdminPanel
               csvInput={csvInput}
               importing={importing}
@@ -714,9 +822,9 @@ export function LearningApp({
               onCsvChange={setCsvInput}
               onImport={importVocabulary}
             />
-          ) : activeModule === "parent" ? (
+          ) : canViewActiveModule && activeModule === "parent" ? (
             <ParentReportPanel report={parentReport} />
-          ) : activeModule === "mistakes" ? (
+          ) : canViewActiveModule && activeModule === "mistakes" ? (
             <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -769,75 +877,77 @@ export function LearningApp({
           ) : null}
         </section>
 
-        <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">学习连续天数</h2>
-              <span className="text-3xl font-black text-teal-700">
-                {studySummary?.streakDays || 0}
-              </span>
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {studySummary?.todayCompleted
-                ? "今天任务已完成，节奏很稳。"
-                : "完成今日任务后会点亮今天。"}
-            </p>
-            <div className="mt-4 grid grid-cols-7 gap-1">
-              {(studySummary?.calendar || []).slice(-14).map((day) => (
-                <span
-                  key={day.date}
-                  title={`${day.date} · ${day.total} 题`}
-                  className={`h-7 rounded-md border ${
-                    day.total > 0
-                      ? "border-teal-300 bg-teal-100"
-                      : "border-border bg-background"
-                  }`}
-                />
-              ))}
-            </div>
-          </section>
+        {account ? (
+          <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold">学习连续天数</h2>
+                <span className="text-3xl font-black text-teal-700">
+                  {studySummary?.streakDays || 0}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {studySummary?.todayCompleted
+                  ? "今天任务已完成，节奏很稳。"
+                  : "完成今日任务后会点亮今天。"}
+              </p>
+              <div className="mt-4 grid grid-cols-7 gap-1">
+                {(studySummary?.calendar || []).slice(-14).map((day) => (
+                  <span
+                    key={day.date}
+                    title={`${day.date} · ${day.total} 题`}
+                    className={`h-7 rounded-md border ${
+                      day.total > 0
+                        ? "border-teal-300 bg-teal-100"
+                        : "border-border bg-background"
+                    }`}
+                  />
+                ))}
+              </div>
+            </section>
 
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-            <h2 className="text-lg font-bold">能力雷达</h2>
-            <div className="mt-4 space-y-4">
-              {ability.map((item) => (
-                <div key={item.label}>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span>{item.label}</span>
-                    <span className="font-semibold">{item.value}%</span>
+            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+              <h2 className="text-lg font-bold">能力雷达</h2>
+              <div className="mt-4 space-y-4">
+                {ability.map((item) => (
+                  <div key={item.label}>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span>{item.label}</span>
+                      <span className="font-semibold">{item.value}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted">
+                      <span
+                        className={`block h-full rounded-full ${item.color}`}
+                        style={{ width: `${item.value}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2 rounded-full bg-muted">
-                    <span
-                      className={`block h-full rounded-full ${item.color}`}
-                      style={{ width: `${item.value}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                ))}
+              </div>
+            </section>
 
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-            <h2 className="text-lg font-bold">下一步建议</h2>
-            <ul className="mt-3 space-y-3 text-sm leading-6 text-muted-foreground">
-              <li>先把高频动词和课堂常见名词练熟。</li>
-              <li>语法从一般现在时和 There be 开始。</li>
-              <li>阅读控制在 50-100 词，先保证看懂大意。</li>
-            </ul>
-          </section>
+            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+              <h2 className="text-lg font-bold">下一步建议</h2>
+              <ul className="mt-3 space-y-3 text-sm leading-6 text-muted-foreground">
+                <li>先把高频动词和课堂常见名词练熟。</li>
+                <li>语法从一般现在时和 There be 开始。</li>
+                <li>阅读控制在 50-100 词，先保证看懂大意。</li>
+              </ul>
+            </section>
 
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">错题数量</h2>
-              <span className="text-3xl font-black text-coral-strong">
-                {mistakes.length}
-              </span>
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              题目答错后会自动加入错题本，连续答对 2 次后会移出。
-            </p>
-          </section>
-        </aside>
+            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold">错题数量</h2>
+                <span className="text-3xl font-black text-coral-strong">
+                  {mistakes.length}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                题目答错后会自动加入错题本，连续答对 2 次后会移出。
+              </p>
+            </section>
+          </aside>
+        ) : null}
       </div>
     </main>
   );

@@ -570,8 +570,8 @@ function requireAuth(req, res) {
   return user;
 }
 
-function isTeacherOrAdmin(user) {
-  return user?.role === "teacher" || user?.role === "admin";
+function isAdmin(user) {
+  return user?.role === "admin";
 }
 
 function canAccessStudent(user, studentId) {
@@ -2131,7 +2131,7 @@ async function route(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/vocabulary") {
-    if (!isTeacherOrAdmin(authUser)) {
+    if (!isAdmin(authUser)) {
       forbidden(res);
       return;
     }
@@ -2141,7 +2141,7 @@ async function route(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/vocabulary/import") {
-    if (!isTeacherOrAdmin(authUser)) {
+    if (!isAdmin(authUser)) {
       forbidden(res);
       return;
     }
@@ -2150,7 +2150,7 @@ async function route(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/questions") {
-    if (!isTeacherOrAdmin(authUser)) {
+    if (!isAdmin(authUser)) {
       forbidden(res);
       return;
     }
@@ -2165,7 +2165,7 @@ async function route(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/questions") {
-    if (!isTeacherOrAdmin(authUser)) {
+    if (!isAdmin(authUser)) {
       forbidden(res);
       return;
     }
