@@ -100,8 +100,8 @@ export function PracticePage({
       : Math.round((Math.min(currentIndex, questions.length) / questions.length) * 100);
 
   return (
-    <main className="min-h-screen bg-background px-4 py-5 text-foreground sm:px-6">
-      <section className="mx-auto flex min-h-[calc(100vh-40px)] max-w-3xl flex-col">
+    <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 sm:py-5">
+      <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-3xl flex-col sm:min-h-[calc(100vh-40px)]">
         <header className="flex items-center justify-between gap-3">
           <button
             type="button"
@@ -125,11 +125,11 @@ export function PracticePage({
 
         {isComplete ? (
           <div className="flex flex-1 items-center justify-center py-10">
-            <section className="w-full rounded-lg border border-border bg-card p-6 text-center shadow-sm">
+            <section className="w-full rounded-lg border border-border bg-card p-4 text-center shadow-sm sm:p-6">
               <p className="text-sm font-semibold text-teal-700">
                 {completionLabel}
               </p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">
+              <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
                 {completionTitle}
               </h1>
               <div className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-4 text-left">
@@ -169,7 +169,7 @@ export function PracticePage({
                   </p>
                 </div>
               </div>
-              <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap sm:justify-center">
                 <button
                   type="button"
                   onClick={onRestart}
@@ -188,8 +188,8 @@ export function PracticePage({
             </section>
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center py-8">
-            <article className="w-full rounded-lg border border-border bg-card p-5 shadow-sm sm:p-7">
+          <div className="flex flex-1 items-center justify-center py-5 sm:py-8">
+            <article className="w-full rounded-lg border border-border bg-card p-4 shadow-sm sm:p-7">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="rounded-md bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground">
                   {moduleLabels[question.module] || title}
@@ -205,7 +205,7 @@ export function PracticePage({
                 </p>
               ) : null}
 
-              <h1 className="mt-5 text-2xl font-black leading-tight tracking-tight sm:text-3xl">
+              <h1 className="mt-5 break-words text-xl font-black leading-tight tracking-tight sm:text-3xl">
                 {question.prompt}
               </h1>
               {speakWord ? (
@@ -225,7 +225,7 @@ export function PracticePage({
                       type="button"
                       onClick={() => onAnswer(question, option)}
                       disabled={Boolean(feedback || selectedAnswer)}
-                      className={`min-h-[54px] flex-1 rounded-md border px-4 py-4 text-left text-base font-semibold transition ${
+                      className={`min-h-[54px] min-w-0 flex-1 break-words rounded-md border px-3 py-3 text-left text-sm font-semibold transition sm:px-4 sm:py-4 sm:text-base ${
                         feedback && isCorrectAnswer
                           ? "border-teal-500 bg-teal-50 text-teal-800"
                           : feedback && isSelected
@@ -245,7 +245,7 @@ export function PracticePage({
                           word={option}
                           label="播放选项"
                           compact
-                          className="min-h-[54px] w-12 shrink-0 px-0"
+                          className="min-h-[54px] w-11 shrink-0 px-0 sm:w-12"
                         />
                       </div>
                     );

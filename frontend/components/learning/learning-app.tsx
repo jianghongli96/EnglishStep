@@ -631,12 +631,12 @@ export function LearningApp({
   return (
     <main className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-20 border-b border-border/80 bg-background/92 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-3 sm:px-6 sm:py-4 lg:px-8">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               English Step
             </p>
-            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+            <h1 className="text-lg font-bold tracking-tight sm:text-2xl">
               基础英语练习站
             </h1>
           </div>
@@ -667,7 +667,7 @@ export function LearningApp({
       </header>
 
       <div
-        className={`mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:px-8 ${
+        className={`mx-auto grid max-w-7xl gap-4 px-3 py-4 sm:gap-5 sm:px-6 sm:py-5 lg:px-8 ${
           account
             ? "lg:grid-cols-[260px_minmax(0,1fr)_300px]"
             : "lg:grid-cols-1"
@@ -675,13 +675,16 @@ export function LearningApp({
       >
         {visibleModules.length > 0 ? (
           <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
-            <nav className="grid gap-2" aria-label="学习模块">
+            <nav
+              className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0 lg:grid lg:overflow-visible lg:pb-0"
+              aria-label="学习模块"
+            >
               {visibleModules.map((module) => (
                 <a
                   key={module.id}
                   href={module.href}
                   onClick={(event) => navigateToModule(event, module)}
-                  className={`rounded-md border px-4 py-3 text-left transition ${
+                  className={`w-[150px] shrink-0 rounded-md border px-3 py-3 text-left transition sm:w-[170px] lg:w-auto ${
                     activeModule === module.id
                       ? "border-primary bg-primary text-primary-foreground shadow-sm"
                       : "border-border bg-card hover:border-primary/45"
@@ -705,20 +708,20 @@ export function LearningApp({
           </aside>
         ) : null}
 
-        <section className="space-y-5">
+        <section className="min-w-0 space-y-4 sm:space-y-5">
           <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-            <div className="relative min-h-[230px]">
+            <div className="relative min-h-[190px] sm:min-h-[230px]">
               <img
                 src="/study-banner.webp"
                 alt="英语学习桌面横幅"
                 className="absolute inset-0 h-full w-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-white/20 to-white/88" />
-              <div className="relative ml-auto flex min-h-[230px] max-w-md flex-col justify-center px-5 py-8 sm:px-8">
+              <div className="absolute inset-0 bg-gradient-to-r from-white/30 via-white/55 to-white/92 sm:from-white/10 sm:via-white/20 sm:to-white/88" />
+              <div className="relative ml-auto flex min-h-[190px] max-w-md flex-col justify-center px-4 py-6 sm:min-h-[230px] sm:px-8 sm:py-8">
                 <p className="text-sm font-semibold text-teal-700">
                   为基础薄弱学生设计
                 </p>
-                <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+                <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-4xl">
                   每天一点点，把英语补回来
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-slate-700">
@@ -735,7 +738,7 @@ export function LearningApp({
           ) : null}
 
           {!loading && !account ? (
-            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
               <h2 className="text-2xl font-bold tracking-tight">
                 请先登录账号
               </h2>
@@ -760,7 +763,7 @@ export function LearningApp({
           ) : null}
 
           {!loading && account && !canViewActiveModule ? (
-            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
               <h2 className="text-2xl font-bold tracking-tight">没有访问权限</h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
                 当前账号身份是 {account.user.role}，不能访问这个页面。请从左侧菜单进入当前身份可用的模块。
@@ -769,7 +772,7 @@ export function LearningApp({
           ) : null}
 
           {loading ? (
-            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
               <h2 className="text-2xl font-bold tracking-tight">
                 正在连接学习后端
               </h2>
@@ -780,7 +783,7 @@ export function LearningApp({
           ) : null}
 
           {activeModule === "daily" && !loading && student && canViewActiveModule ? (
-            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-teal-700">
@@ -790,7 +793,7 @@ export function LearningApp({
                     15 分钟基础巩固
                   </h2>
                 </div>
-                <span className="rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground">
+                <span className="w-full rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground sm:w-auto">
                   来自后端的个性化任务
                 </span>
               </div>
@@ -874,7 +877,7 @@ export function LearningApp({
           ) : canViewActiveModule && activeModule === "parent" ? (
             <ParentReportPanel report={parentReport} />
           ) : canViewActiveModule && activeModule === "mistakes" ? (
-            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-teal-700">
@@ -888,7 +891,7 @@ export function LearningApp({
                   type="button"
                   onClick={startMistakePractice}
                   disabled={mistakes.length === 0 || dailyLoading}
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 >
                   {dailyLoading ? "准备中" : "开始错题专项训练"}
                 </button>
@@ -1108,23 +1111,23 @@ function VocabularyStudyPanel({
   }
 
   return (
-    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-teal-700">先学再练</p>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight">词汇学习卡</h2>
+          <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">词汇学习卡</h2>
         </div>
         <button
           type="button"
           onClick={onReload}
-          className="rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50"
+          className="min-h-10 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50 sm:w-auto"
         >
           换一批词
         </button>
       </div>
 
       <form
-        className="mt-5 rounded-md border border-border bg-background p-4"
+        className="mt-4 rounded-md border border-border bg-background p-3 sm:mt-5 sm:p-4"
         onSubmit={(event) => {
           event.preventDefault();
           void searchVocabulary();
@@ -1139,12 +1142,12 @@ function VocabularyStudyPanel({
             value={searchWord}
             onChange={(event) => setSearchWord(event.target.value)}
             placeholder="输入英文单词，例如 shop"
-            className="min-h-11 flex-1 rounded-md border border-border bg-card px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="min-h-11 min-w-0 flex-1 rounded-md border border-border bg-card px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
           <button
             type="submit"
             disabled={searching}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-11 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             {searching ? "查询中" : "查询"}
           </button>
@@ -1180,18 +1183,23 @@ function VocabularyStudyPanel({
           {vocabulary.map((item) => (
             <article
               key={item.id}
-              className="rounded-md border border-border bg-background p-4"
+              className="rounded-md border border-border bg-background p-3 sm:p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="break-words text-2xl font-black tracking-tight">
+                  <h3 className="break-words text-xl font-black tracking-tight sm:text-2xl">
                     {item.word}
                   </h3>
                   <p className="mt-1 text-sm font-semibold text-teal-700">
                     {item.partOfSpeech || "词汇"} · {item.meaning}
                   </p>
                 </div>
-                <WordAudioButton word={item.word} label="播放" compact />
+                <WordAudioButton
+                  word={item.word}
+                  label="播放"
+                  compact
+                  className="shrink-0"
+                />
               </div>
               {item.example ? (
                 <p className="mt-3 rounded-md bg-secondary p-3 text-sm leading-6 text-secondary-foreground">
@@ -1221,11 +1229,11 @@ function VocabularyStudyPanel({
 
 function VocabularyLookupCard({ item }: { item: VocabularyItem }) {
   return (
-    <article className="rounded-md border border-border bg-card p-4">
+    <article className="rounded-md border border-border bg-card p-3 sm:p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h3 className="break-words text-2xl font-black tracking-tight">
+            <h3 className="break-words text-xl font-black tracking-tight sm:text-2xl">
               {item.word}
             </h3>
             {item.phonetic ? (
@@ -1238,7 +1246,12 @@ function VocabularyLookupCard({ item }: { item: VocabularyItem }) {
             {item.partOfSpeech || "词汇"} · {item.meaning}
           </p>
         </div>
-        <WordAudioButton word={item.word} label="播放" compact />
+        <WordAudioButton
+          word={item.word}
+          label="播放"
+          compact
+          className="shrink-0"
+        />
       </div>
       {item.example ? (
         <p className="mt-3 rounded-md bg-secondary p-3 text-sm leading-6 text-secondary-foreground">
