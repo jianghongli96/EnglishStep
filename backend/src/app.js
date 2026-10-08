@@ -64,6 +64,7 @@ db.exec("PRAGMA journal_mode = WAL");
 initSchema(db);
 ensureVocabularyUuidIds();
 ensureVocabularyDifficultyFromFrequency();
+ensureVocabularySpellingRules();
 ensureBuiltInAdminAccount();
 if (AUTO_SEED_DATABASE && (isNewDatabase || countRows("questions") === 0)) {
   await seedDatabase();
@@ -470,6 +471,77 @@ function questionDifficultyForVocabulary(vocab, offset = 0) {
   return clampDifficulty(difficultyFromFrequency(vocab, vocab?.difficulty || 1) + offset);
 }
 
+function spellingSettingsForVocabulary(entry) {
+  const word = normalizeText(entry?.word || "");
+  const partOfSpeech = normalizeText(
+    entry?.partOfSpeech || entry?.part_of_speech || "",
+  ).toLowerCase();
+
+  if (!word) {
+    return { enabled: false, mode: "unsupported", answer: "" };
+  }
+  if (/\s/.test(word)) {
+    return { enabled: false, mode: "phrase", answer: word };
+  }
+  if (/[./=()\[\]／]/.test(word)) {
+    return { enabled: false, mode: "abbreviation", answer: word };
+  }
+  if (
+    /^[A-Z]{2,6}$/.test(word) ||
+    partOfSpeech.includes("abbr") ||
+    partOfSpeech.includes("缩写")
+  ) {
+    return { enabled: false, mode: "abbreviation", answer: word };
+  }
+  if (!/^[A-Za-z'-]+$/.test(word)) {
+    return { enabled: false, mode: "unsupported", answer: word };
+  }
+
+  return {
+    enabled: true,
+    mode: /['-]/.test(word) ? "punctuated" : "word",
+    answer: word,
+  };
+}
+
+function ensureVocabularySpellingRules() {
+  const rows = db
+    .prepare(
+      `SELECT id, word, part_of_speech, spelling_enabled,
+              spelling_mode, spelling_answer
+       FROM vocabulary`,
+    )
+    .all();
+  const updateVocabulary = db.prepare(
+    `UPDATE vocabulary
+     SET spelling_enabled = ?, spelling_mode = ?, spelling_answer = ?
+     WHERE id = ?`,
+  );
+  const archiveSpellingQuestions = db.prepare(
+    `UPDATE questions SET status = 'archived'
+     WHERE vocabulary_id = ? AND type = 'spelling' AND status = 'published'`,
+  );
+
+  withTransaction(() => {
+    for (const row of rows) {
+      const settings = spellingSettingsForVocabulary(row);
+      if (
+        Number(row.spelling_enabled) !== Number(settings.enabled) ||
+        row.spelling_mode !== settings.mode ||
+        row.spelling_answer !== settings.answer
+      ) {
+        updateVocabulary.run(
+          settings.enabled ? 1 : 0,
+          settings.mode,
+          settings.answer,
+          row.id,
+        );
+      }
+      if (!settings.enabled) archiveSpellingQuestions.run(row.id);
+    }
+  });
+}
+
 function ensureVocabularyUuidIds() {
   const rows = db.prepare("SELECT id FROM vocabulary").all();
   const migrations = rows
@@ -603,6 +675,10 @@ function rowToVocabulary(row) {
 	    tag: row.tag,
 	    bnc: Number(row.bnc || 0),
 	    frq: Number(row.frq || 0),
+	    spellingEnabled: Boolean(row.spelling_enabled),
+	    spellingMode: row.spelling_mode || "word",
+	    spellingAnswer: row.spelling_answer || row.word,
+	    acceptedAnswers: parseJson(row.accepted_answers_json, []),
 	    tags: parseJson(row.tags_json, []),
 	    createdAt: row.created_at,
   };
@@ -1393,6 +1469,9 @@ function recommendSpellingQuestions(studentId, limit = 10) {
           ELSE 3
         END AS priority
       FROM questions q
+      JOIN vocabulary v
+        ON v.id = q.vocabulary_id
+        AND v.spelling_enabled = 1
       LEFT JOIN mistakes m
         ON m.question_id = q.id
         AND m.student_id = ?
@@ -1938,7 +2017,16 @@ async function handleAttempt(req, res) {
   }
 
   const answer = normalizeText(body.answer || "");
-  const correct = normalizeAnswer(answer) === normalizeAnswer(question.answer);
+  const acceptedAnswers = [question.answer];
+  if (question.type === "spelling" && question.vocabularyId) {
+    const vocabulary = rowToVocabulary(
+      db.prepare("SELECT * FROM vocabulary WHERE id = ?").get(question.vocabularyId),
+    );
+    acceptedAnswers.push(...(vocabulary?.acceptedAnswers || []));
+  }
+  const correct = acceptedAnswers.some(
+    (acceptedAnswer) => normalizeAnswer(answer) === normalizeAnswer(acceptedAnswer),
+  );
   const now = new Date().toISOString();
   const attempt = {
     id: randomUUID(),
@@ -2118,7 +2206,10 @@ function updateStudentKnowledge(studentId, knowledgePoint, correct, now) {
 }
 
 function normalizeAnswer(value) {
-  return normalizeText(value).replace(/\s+$/g, "");
+  return normalizeText(value)
+    .toLowerCase()
+    .replaceAll("’", "'")
+    .replace(/\s+$/g, "");
 }
 
 function nextReviewAt(masteryLevel, correct) {
@@ -2234,7 +2325,7 @@ function normalizeVocabulary(item) {
   const frq = Number(item.frq || 0);
   const explicitDifficulty = Number(item.difficulty || 0);
 
-  return {
+  const vocabulary = {
     id,
     word,
     meaning,
@@ -2250,7 +2341,17 @@ function normalizeVocabulary(item) {
     bnc,
     frq,
     tags: normalizeTags(item.tags || item.tag),
+    acceptedAnswers: Array.isArray(item.acceptedAnswers)
+      ? item.acceptedAnswers.map(normalizeText).filter(Boolean)
+      : [],
     createdAt: item.createdAt || now,
+  };
+  const spelling = spellingSettingsForVocabulary(vocabulary);
+  return {
+    ...vocabulary,
+    spellingEnabled: spelling.enabled,
+    spellingMode: spelling.mode,
+    spellingAnswer: spelling.answer,
   };
 }
 
@@ -2271,8 +2372,9 @@ function insertVocabulary(vocab) {
     .prepare(
       `INSERT OR IGNORE INTO vocabulary (
         id, word, meaning, part_of_speech, phonetic, example, grade, semester,
-        source_book, source_unit, difficulty, tag, bnc, frq, tags_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        source_book, source_unit, difficulty, tag, bnc, frq, spelling_enabled,
+        spelling_mode, spelling_answer, accepted_answers_json, tags_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       vocab.id,
@@ -2289,6 +2391,10 @@ function insertVocabulary(vocab) {
       vocab.tag,
       vocab.bnc,
       vocab.frq,
+      vocab.spellingEnabled ? 1 : 0,
+      vocab.spellingMode,
+      vocab.spellingAnswer,
+      JSON.stringify(vocab.acceptedAnswers || []),
       JSON.stringify(vocab.tags),
       vocab.createdAt,
     );
@@ -2310,7 +2416,7 @@ function generateVocabularyQuestions(vocab, status) {
     createdAt,
   };
 
-  return [
+  const questions = [
     normalizeQuestion({
       ...common,
       id: `q-${vocab.id}-meaning-choice`,
@@ -2341,11 +2447,16 @@ function generateVocabularyQuestions(vocab, status) {
       explain: `根据句意和词义，这里应填 ${vocab.word}。`,
       difficulty: questionDifficultyForVocabulary(vocab, 1),
     }),
-    spellingQuestionForVocabulary(vocab, status),
   ];
+  const spellingQuestion = spellingQuestionForVocabulary(vocab, status);
+  if (spellingQuestion) questions.push(spellingQuestion);
+  return questions;
 }
 
 function spellingQuestionForVocabulary(vocab, status = "published") {
+  const spelling = spellingSettingsForVocabulary(vocab);
+  if (!spelling.enabled) return null;
+
   return normalizeQuestion({
     module: "words",
     grade: vocab.grade,
@@ -2362,7 +2473,7 @@ function spellingQuestionForVocabulary(vocab, status = "published") {
     vocabulary: [vocab.phonetic || ""],
     prompt: `根据中文意思拼写单词：${vocab.meaning}`,
     options: [],
-    answer: vocab.word,
+    answer: vocab.spellingAnswer || spelling.answer,
     explain: `“${vocab.meaning}”对应的英文是 ${vocab.word}。`,
     difficulty: questionDifficultyForVocabulary(vocab),
   });
@@ -2375,7 +2486,7 @@ function ensureSpellingQuestions() {
        FROM vocabulary v
        LEFT JOIN questions q ON q.vocabulary_id = v.id
         AND q.type = 'spelling'
-       WHERE q.id IS NULL
+       WHERE q.id IS NULL AND v.spelling_enabled = 1
        LIMIT 500`,
     )
     .all();
@@ -2383,7 +2494,8 @@ function ensureSpellingQuestions() {
   for (const row of rows) {
     const vocab = rowToVocabulary(row);
     if (vocab) {
-      insertQuestion(spellingQuestionForVocabulary(vocab, "published"));
+      const question = spellingQuestionForVocabulary(vocab, "published");
+      if (question) insertQuestion(question);
     }
   }
 }

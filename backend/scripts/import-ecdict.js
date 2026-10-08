@@ -59,8 +59,9 @@ const findVocabularyByUnique = db.prepare(`
 const insertVocabulary = db.prepare(`
   INSERT OR IGNORE INTO vocabulary (
     id, word, meaning, part_of_speech, phonetic, example, grade, semester,
-    source_book, source_unit, difficulty, tag, bnc, frq, tags_json, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    source_book, source_unit, difficulty, tag, bnc, frq, spelling_enabled,
+    spelling_mode, spelling_answer, accepted_answers_json, tags_json, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const updateVocabularyFromDictionary = db.prepare(`
@@ -74,12 +75,22 @@ const updateVocabularyFromDictionary = db.prepare(`
   WHERE lower(word) = lower(?)
 `);
 
+const updateVocabularySpelling = db.prepare(`
+  UPDATE vocabulary
+  SET spelling_enabled = ?, spelling_mode = ?, spelling_answer = ?
+  WHERE lower(word) = lower(?)
+`);
+
 const insertQuestion = db.prepare(`
   INSERT OR IGNORE INTO questions (
     id, module, type, title, passage, vocabulary_json, prompt, options_json,
     answer, explain, grade, difficulty, knowledge_point, vocabulary_id,
     source_book, source_unit, source_type, status, fingerprint, created_at
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const archiveSpellingQuestions = db.prepare(`
+  UPDATE questions SET status = 'archived'
+  WHERE vocabulary_id = ? AND type = 'spelling' AND status = 'published'
 `);
 
 const meaningDistractors = db.prepare(
@@ -140,6 +151,12 @@ try {
 
     if (shouldImportToVocabulary(entry)) {
       const vocab = dictionaryEntryToVocabulary(entry);
+      updateVocabularySpelling.run(
+        vocab.spellingEnabled ? 1 : 0,
+        vocab.spellingMode,
+        vocab.spellingAnswer,
+        vocab.word,
+      );
       const insertResult = insertVocabulary.run(
         vocab.id,
         vocab.word,
@@ -155,6 +172,10 @@ try {
         vocab.tag,
         vocab.bnc,
         vocab.frq,
+        vocab.spellingEnabled ? 1 : 0,
+        vocab.spellingMode,
+        vocab.spellingAnswer,
+        JSON.stringify(vocab.acceptedAnswers || []),
         JSON.stringify(vocab.tags),
         vocab.createdAt,
       );
@@ -174,6 +195,7 @@ try {
       }
 
       if (savedVocabulary) {
+        if (!vocab.spellingEnabled) archiveSpellingQuestions.run(savedVocabulary.id);
         for (const question of generateVocabularyQuestions(rowToVocabulary(savedVocabulary))) {
           const result = insertQuestion.run(...questionParams(question));
           if (result.changes > 0) {
@@ -286,7 +308,7 @@ function normalizeDictionaryEntry(row) {
 }
 
 function dictionaryEntryToVocabulary(entry) {
-  return {
+  const vocabulary = {
     id: randomUUID(),
     word: entry.word,
     meaning: firstChineseMeaning(entry.translation),
@@ -302,7 +324,15 @@ function dictionaryEntryToVocabulary(entry) {
     bnc: entry.bnc,
     frq: entry.frq,
     tags: entry.tags,
+    acceptedAnswers: [],
     createdAt: now,
+  };
+  const spelling = spellingSettingsForVocabulary(vocabulary);
+  return {
+    ...vocabulary,
+    spellingEnabled: spelling.enabled,
+    spellingMode: spelling.mode,
+    spellingAnswer: spelling.answer,
   };
 }
 
@@ -329,7 +359,7 @@ function generateVocabularyQuestions(vocab) {
     createdAt,
   };
 
-  return [
+  const questions = [
     normalizeQuestion({
       ...common,
       id: `q-${vocab.id}-meaning-choice`,
@@ -369,19 +399,25 @@ function generateVocabularyQuestions(vocab) {
       explain: `根据句意和词义，这里应填 ${vocab.word}。`,
       difficulty: questionDifficultyForVocabulary(vocab, 1),
     }),
-    normalizeQuestion({
-      ...common,
-      id: `q-${vocab.id}-spelling`,
-      type: "spelling",
-      title: "拼写练习",
-      vocabulary: [vocab.phonetic || ""],
-      prompt: `根据中文意思拼写单词：${vocab.meaning}`,
-      options: [],
-      answer: vocab.word,
-      explain: `“${vocab.meaning}”对应的英文是 ${vocab.word}。`,
-      difficulty: baseDifficulty,
-    }),
   ];
+  const spelling = spellingSettingsForVocabulary(vocab);
+  if (spelling.enabled) {
+    questions.push(
+      normalizeQuestion({
+        ...common,
+        id: `q-${vocab.id}-spelling`,
+        type: "spelling",
+        title: "拼写练习",
+        vocabulary: [vocab.phonetic || ""],
+        prompt: `根据中文意思拼写单词：${vocab.meaning}`,
+        options: [],
+        answer: vocab.spellingAnswer || spelling.answer,
+        explain: `“${vocab.meaning}”对应的英文是 ${vocab.word}。`,
+        difficulty: baseDifficulty,
+      }),
+    );
+  }
+  return questions;
 }
 
 function normalizeQuestion(question) {
@@ -447,6 +483,10 @@ function rowToVocabulary(row) {
     tag: row.tag,
     bnc: Number(row.bnc || 0),
     frq: Number(row.frq || 0),
+    spellingEnabled: Boolean(row.spelling_enabled),
+    spellingMode: row.spelling_mode || "word",
+    spellingAnswer: row.spelling_answer || row.word,
+    acceptedAnswers: parseJson(row.accepted_answers_json, []),
     tags: parseJson(row.tags_json, []),
     createdAt: row.created_at,
   };
@@ -458,6 +498,34 @@ function normalizeText(value) {
 
 function cleanWord(value) {
   return normalizeText(value).replaceAll("*", "").trim();
+}
+
+function spellingSettingsForVocabulary(entry) {
+  const word = normalizeText(entry?.word || "");
+  const partOfSpeech = normalizeText(
+    entry?.partOfSpeech || entry?.part_of_speech || "",
+  ).toLowerCase();
+
+  if (!word) return { enabled: false, mode: "unsupported", answer: "" };
+  if (/\s/.test(word)) return { enabled: false, mode: "phrase", answer: word };
+  if (/[./=()\[\]／]/.test(word)) {
+    return { enabled: false, mode: "abbreviation", answer: word };
+  }
+  if (
+    /^[A-Z]{2,6}$/.test(word) ||
+    partOfSpeech.includes("abbr") ||
+    partOfSpeech.includes("缩写")
+  ) {
+    return { enabled: false, mode: "abbreviation", answer: word };
+  }
+  if (!/^[A-Za-z'-]+$/.test(word)) {
+    return { enabled: false, mode: "unsupported", answer: word };
+  }
+  return {
+    enabled: true,
+    mode: /['-]/.test(word) ? "punctuated" : "word",
+    answer: word,
+  };
 }
 
 function normalizeTags(value) {

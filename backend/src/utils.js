@@ -10,7 +10,9 @@ export function publicQuestion(question) {
   if (!question) return null;
   const { answer, ...safeQuestion } = question;
   if (question.type === "spelling") {
-    safeQuestion.answerLength = normalizeText(answer).length;
+    const normalizedAnswer = normalizeText(answer);
+    safeQuestion.answerLength = (normalizedAnswer.match(/[A-Za-z]/g) || []).length;
+    safeQuestion.spellingPattern = normalizedAnswer.replace(/[A-Za-z]/g, "_");
   }
   return safeQuestion;
 }

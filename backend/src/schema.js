@@ -25,6 +25,10 @@ export function initSchema(db) {
 	      tag TEXT,
 	      bnc INTEGER NOT NULL DEFAULT 0,
 	      frq INTEGER NOT NULL DEFAULT 0,
+	      spelling_enabled INTEGER NOT NULL DEFAULT 1,
+	      spelling_mode TEXT NOT NULL DEFAULT 'word',
+	      spelling_answer TEXT,
+	      accepted_answers_json TEXT NOT NULL DEFAULT '[]',
 	      tags_json TEXT NOT NULL DEFAULT '[]',
 	      created_at TEXT NOT NULL,
 	      UNIQUE(word, meaning, source_book, source_unit)
@@ -233,6 +237,15 @@ export function initSchema(db) {
 	  ensureColumn(db, "vocabulary", "tag", "TEXT");
 	  ensureColumn(db, "vocabulary", "bnc", "INTEGER NOT NULL DEFAULT 0");
 	  ensureColumn(db, "vocabulary", "frq", "INTEGER NOT NULL DEFAULT 0");
+	  ensureColumn(db, "vocabulary", "spelling_enabled", "INTEGER NOT NULL DEFAULT 1");
+	  ensureColumn(db, "vocabulary", "spelling_mode", "TEXT NOT NULL DEFAULT 'word'");
+	  ensureColumn(db, "vocabulary", "spelling_answer", "TEXT");
+	  ensureColumn(
+	    db,
+	    "vocabulary",
+	    "accepted_answers_json",
+	    "TEXT NOT NULL DEFAULT '[]'",
+	  );
 	}
 
 function ensureColumn(db, table, column, definition) {

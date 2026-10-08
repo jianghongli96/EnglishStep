@@ -41,6 +41,7 @@ export type PracticeItem = {
   options: string[];
   explain: string;
   answerLength?: number;
+  spellingPattern?: string;
   grade?: string;
   difficulty?: number;
   knowledgePoint?: string;

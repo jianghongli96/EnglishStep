@@ -324,6 +324,12 @@ export function SpellingPracticePage({
   const lastSubmittedAnswerRef = useRef("");
   const phonetic = question?.vocabulary?.find(Boolean) || "";
   const answerLength = Math.max(1, Number(question?.answerLength || 0));
+  const spellingPattern = question?.spellingPattern || "_".repeat(answerLength);
+  let nextInputIndex = 0;
+  const spellingSlots = Array.from(spellingPattern).map((character) => ({
+    character,
+    inputIndex: character === "_" ? nextInputIndex++ : null,
+  }));
 
   useEffect(() => {
     setTypedAnswer("");
@@ -340,7 +346,13 @@ export function SpellingPracticePage({
 
     lastSubmittedAnswerRef.current = answer;
     setSubmitting(true);
-    const result = await onAnswer(question, answer);
+    let letterIndex = 0;
+    const submittedAnswer = Array.from(spellingPattern)
+      .map((character) =>
+        character === "_" ? answer[letterIndex++] || "" : character,
+      )
+      .join("");
+    const result = await onAnswer(question, submittedAnswer);
     setSubmitting(false);
 
     if (!result) return;
@@ -355,7 +367,7 @@ export function SpellingPracticePage({
   function updateSpellingAnswer(value: string) {
     const nextAnswer = value
       .toLowerCase()
-      .replace(/[^a-z'-]/g, "")
+      .replace(/[^a-z]/g, "")
       .slice(0, answerLength);
 
     setTypedAnswer(nextAnswer);
@@ -478,26 +490,36 @@ export function SpellingPracticePage({
                 className="relative grid w-full cursor-text grid-cols-[repeat(auto-fit,minmax(1.5rem,1fr))] justify-items-center gap-x-2 gap-y-4 rounded-md bg-background p-3 sm:flex sm:flex-wrap sm:justify-center sm:gap-x-3 sm:p-5"
                 aria-label="拼写输入框"
               >
-                {Array.from({ length: answerLength }).map((_, index) => (
-                  <span
-                    key={`${question.id}-${index}`}
-                    className={`relative flex h-14 w-full max-w-8 items-center justify-center border-b-2 pt-3 text-lg font-black uppercase sm:w-10 sm:max-w-none sm:text-xl md:w-11 ${
-                      hasError
-                        ? "border-coral text-coral-strong"
-                        : "border-foreground text-foreground"
-                    }`}
-                  >
-                    {!submitting && typedAnswer.length === index ? (
-                      <span
-                        className={`absolute top-0 h-5 w-0.5 animate-pulse rounded-full ${
-                          hasError ? "bg-coral" : "bg-primary"
-                        }`}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    {typedAnswer[index] || ""}
-                  </span>
-                ))}
+                {spellingSlots.map((slot, index) =>
+                  slot.inputIndex === null ? (
+                    <span
+                      key={`${question.id}-${index}`}
+                      className="flex h-14 items-end justify-center pb-1 text-xl font-black text-muted-foreground"
+                      aria-hidden="true"
+                    >
+                      {slot.character}
+                    </span>
+                  ) : (
+                    <span
+                      key={`${question.id}-${index}`}
+                      className={`relative flex h-14 w-full max-w-8 items-center justify-center border-b-2 pt-3 text-lg font-black uppercase sm:w-10 sm:max-w-none sm:text-xl md:w-11 ${
+                        hasError
+                          ? "border-coral text-coral-strong"
+                          : "border-foreground text-foreground"
+                      }`}
+                    >
+                      {!submitting && typedAnswer.length === slot.inputIndex ? (
+                        <span
+                          className={`absolute top-0 h-5 w-0.5 animate-pulse rounded-full ${
+                            hasError ? "bg-coral" : "bg-primary"
+                          }`}
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                      {typedAnswer[slot.inputIndex] || ""}
+                    </span>
+                  ),
+                )}
                 <input
                   ref={inputRef}
                   value={typedAnswer}
