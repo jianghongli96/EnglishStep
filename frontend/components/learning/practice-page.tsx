@@ -102,13 +102,13 @@ export function PracticePage({
       : Math.round((Math.min(currentIndex, questions.length) / questions.length) * 100);
 
   return (
-    <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 sm:py-5">
+    <main className="min-h-screen bg-background px-4 py-4 text-foreground sm:px-6 sm:py-5">
       <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-3xl flex-col sm:min-h-[calc(100vh-40px)]">
-        <header className="flex items-center justify-between gap-3">
+        <header className="flex items-center justify-between gap-2 sm:gap-3">
           <button
             type="button"
             onClick={onExit}
-            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50"
+            className="rounded-md border border-border bg-card px-3 py-2.5 text-sm font-semibold transition hover:border-primary/50"
           >
             返回
           </button>
@@ -175,14 +175,14 @@ export function PracticePage({
                 <button
                   type="button"
                   onClick={onRestart}
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                  className="rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground sm:py-2"
                 >
                   再来一轮
                 </button>
                 <button
                   type="button"
                   onClick={onExit}
-                  className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold"
+                  className="rounded-md border border-border bg-card px-4 py-3 text-sm font-semibold sm:py-2"
                 >
                   回到首页
                 </button>
@@ -190,7 +190,7 @@ export function PracticePage({
             </section>
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center py-5 sm:py-8">
+          <div className="flex flex-1 items-center justify-center py-4 sm:py-8">
             <article className="w-full rounded-lg border border-border bg-card p-4 shadow-sm sm:p-7">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="rounded-md bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground">
@@ -202,12 +202,12 @@ export function PracticePage({
               </div>
 
               {question.passage ? (
-                <p className="mt-5 rounded-md bg-secondary p-4 text-sm leading-7 text-secondary-foreground">
+                <p className="mt-4 rounded-md bg-secondary p-3 text-sm leading-7 text-secondary-foreground sm:mt-5 sm:p-4">
                   {question.passage}
                 </p>
               ) : null}
 
-              <h1 className="mt-5 break-words text-xl font-black leading-tight tracking-tight sm:text-3xl">
+              <h1 className="mt-5 break-words text-xl font-black leading-snug tracking-tight sm:text-3xl sm:leading-tight">
                 {question.prompt}
               </h1>
               {speakWord ? (
@@ -216,7 +216,7 @@ export function PracticePage({
                 </div>
               ) : null}
 
-              <div className="mt-6 grid gap-3">
+              <div className="mt-5 grid gap-3 sm:mt-6">
                 {question.options.map((option) => {
                   const isSelected = selectedAnswer === option;
                   const isCorrectAnswer = feedback?.correctAnswer === option;
@@ -227,7 +227,7 @@ export function PracticePage({
                       type="button"
                       onClick={() => onAnswer(question, option)}
                       disabled={Boolean(feedback || selectedAnswer)}
-                      className={`min-h-[54px] min-w-0 flex-1 break-words rounded-md border px-3 py-3 text-left text-sm font-semibold transition sm:px-4 sm:py-4 sm:text-base ${
+                      className={`min-h-[58px] min-w-0 flex-1 break-words rounded-md border px-3 py-3 text-left text-sm font-semibold leading-6 transition sm:px-4 sm:py-4 sm:text-base ${
                         feedback && isCorrectAnswer
                           ? "border-teal-500 bg-teal-50 text-teal-800"
                           : feedback && isSelected
@@ -247,7 +247,7 @@ export function PracticePage({
                           word={option}
                           label="播放选项"
                           compact
-                          className="min-h-[54px] w-11 shrink-0 px-0 sm:w-12"
+                          className="min-h-[58px] w-11 shrink-0 px-0 sm:w-12"
                         />
                       </div>
                     );
@@ -268,7 +268,7 @@ export function PracticePage({
                   <button
                     type="button"
                     onClick={onNext}
-                    className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                    className="mt-4 w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground sm:w-auto sm:py-2"
                   >
                     下一题
                   </button>
@@ -368,7 +368,7 @@ export function SpellingPracticePage({
 
   if (isComplete) {
     return (
-      <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 sm:py-5">
+      <main className="min-h-screen bg-background px-4 py-4 text-foreground sm:px-6 sm:py-5">
         <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-5xl flex-col justify-center sm:min-h-[calc(100vh-40px)]">
           <section className="w-full rounded-lg border border-border bg-card p-4 text-center shadow-sm sm:p-6">
             <p className="text-sm font-semibold text-teal-700">{completionLabel}</p>
@@ -408,14 +408,14 @@ export function SpellingPracticePage({
               <button
                 type="button"
                 onClick={onRestart}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                className="rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground sm:py-2"
               >
                 再来一轮
               </button>
               <button
                 type="button"
                 onClick={onExit}
-                className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold"
+                className="rounded-md border border-border bg-card px-4 py-3 text-sm font-semibold sm:py-2"
               >
                 回到首页
               </button>
@@ -427,13 +427,13 @@ export function SpellingPracticePage({
   }
 
   return (
-    <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 sm:py-5">
+    <main className="min-h-screen bg-background px-4 py-4 text-foreground sm:px-6 sm:py-5">
       <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-5xl flex-col sm:min-h-[calc(100vh-40px)]">
-        <header className="flex items-center justify-between gap-3">
+        <header className="flex items-center justify-between gap-2 sm:gap-3">
           <button
             type="button"
             onClick={onExit}
-            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50"
+            className="rounded-md border border-border bg-card px-3 py-2.5 text-sm font-semibold transition hover:border-primary/50"
           >
             返回
           </button>
@@ -450,7 +450,7 @@ export function SpellingPracticePage({
           </span>
         </header>
 
-        <div className="flex flex-1 items-center justify-center py-5 sm:py-8">
+        <div className="flex flex-1 items-center justify-center py-4 sm:py-8">
           <article className="w-full rounded-lg border border-border bg-card p-4 shadow-sm sm:p-7">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="rounded-md bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground">
@@ -469,19 +469,19 @@ export function SpellingPracticePage({
                 </p>
               ) : null}
             </div>
-            <h1 className="mt-2 break-words text-2xl font-black leading-tight tracking-tight sm:text-3xl">
+            <h1 className="mt-2 break-words text-xl font-black leading-snug tracking-tight sm:text-3xl sm:leading-tight">
               {question.prompt.replace(/^根据中文意思拼写单词：/, "")}
             </h1>
             <div className="mt-7">
               <div
                 onClick={() => inputRef.current?.focus()}
-                className="relative flex w-full cursor-text flex-wrap justify-center gap-x-2 gap-y-4 rounded-md bg-background p-4 sm:gap-x-3 sm:p-5"
+                className="relative grid w-full cursor-text grid-cols-[repeat(auto-fit,minmax(1.5rem,1fr))] justify-items-center gap-x-2 gap-y-4 rounded-md bg-background p-3 sm:flex sm:flex-wrap sm:justify-center sm:gap-x-3 sm:p-5"
                 aria-label="拼写输入框"
               >
                 {Array.from({ length: answerLength }).map((_, index) => (
                   <span
                     key={`${question.id}-${index}`}
-                    className={`relative flex h-14 w-8 items-center justify-center border-b-2 pt-3 text-lg font-black uppercase sm:w-10 sm:text-xl md:w-11 ${
+                    className={`relative flex h-14 w-full max-w-8 items-center justify-center border-b-2 pt-3 text-lg font-black uppercase sm:w-10 sm:max-w-none sm:text-xl md:w-11 ${
                       hasError
                         ? "border-coral text-coral-strong"
                         : "border-foreground text-foreground"

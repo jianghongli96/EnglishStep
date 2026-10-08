@@ -1099,7 +1099,9 @@ function getQuestionsByIds(questionIds) {
     .all(...questionIds);
   const byId = new Map(rows.map((row) => [row.id, rowToQuestion(row, false)]));
 
-  return questionIds.map((id) => byId.get(id)).filter(Boolean);
+  return questionIds
+    .map((id) => byId.get(id))
+    .filter((question) => question && question.type !== "spelling");
 }
 
 function countCompletedPlannedQuestions(studentId, questionIds, createdAt) {
@@ -1212,6 +1214,7 @@ function selectRecommendedQuestionRows(studentId, module, limit = 5) {
       ) a ON a.question_id = q.id
       WHERE q.status = 'published'
         AND (? IS NULL OR q.module = ?)
+        AND q.type <> 'spelling'
       ORDER BY priority ASC, q.difficulty ASC, RANDOM()
       LIMIT ?
     `,

@@ -500,7 +500,10 @@ export function LearningApp({
       );
       const queue = response.mistakes
         .map((mistake) => mistake.question)
-        .filter((question): question is PracticeItem => Boolean(question));
+        .filter(
+          (question): question is PracticeItem =>
+            Boolean(question) && question.type !== "spelling",
+        );
 
       setMistakes(response.mistakes);
       setDailyQueue(shuffleQuestions(queue));
@@ -714,25 +717,25 @@ export function LearningApp({
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-20 border-b border-border/80 bg-background/92 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-3 sm:px-6 sm:py-4 lg:px-8">
+      <header className="sticky top-0 z-20 w-full max-w-full overflow-hidden border-b border-border/80 bg-background/92 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 sm:py-4 lg:px-8">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <p className="text-[11px] font-semibold uppercase text-muted-foreground sm:text-xs">
               English Step
             </p>
-            <h1 className="text-lg font-bold tracking-tight sm:text-2xl">
+            <h1 className="truncate text-base font-bold tracking-tight sm:text-2xl">
               基础英语练习站
             </h1>
           </div>
-          <div className="hidden items-center gap-2 sm:flex">
+          <div className="flex shrink-0 items-center gap-2">
             {account ? (
-              <span className="rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+              <span className="hidden rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground sm:inline-flex">
                 {account.user.name} · {account.user.role}
               </span>
             ) : null}
             <a
               href={account ? "/account" : "/login"}
-              className="rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50"
+              className="rounded-md border border-border bg-card px-3 py-2.5 text-sm font-semibold transition hover:border-primary/50"
             >
               {account ? "账号" : "登录"}
             </a>
@@ -751,16 +754,16 @@ export function LearningApp({
       </header>
 
       <div
-        className={`mx-auto grid max-w-7xl gap-4 px-3 py-4 sm:gap-5 sm:px-6 sm:py-5 lg:px-8 ${
+        className={`mx-auto grid w-full max-w-7xl gap-4 overflow-hidden px-4 py-4 sm:gap-5 sm:px-6 sm:py-5 lg:px-8 ${
           account
             ? "lg:grid-cols-[260px_minmax(0,1fr)_300px]"
             : "lg:grid-cols-1"
         }`}
       >
         {visibleModules.length > 0 ? (
-          <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
+          <aside className="min-w-0 space-y-3 lg:sticky lg:top-24 lg:self-start">
             <nav
-              className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0 lg:grid lg:overflow-visible lg:pb-0"
+              className="flex max-w-full snap-x gap-2 overflow-x-auto pb-2 lg:grid lg:overflow-visible lg:pb-0"
               aria-label="学习模块"
             >
               {visibleModules.map((module) => (
@@ -768,17 +771,17 @@ export function LearningApp({
                   key={module.id}
                   href={module.href}
                   onClick={(event) => navigateToModule(event, module)}
-                  className={`w-[150px] shrink-0 rounded-md border px-3 py-3 text-left transition sm:w-[170px] lg:w-auto ${
+                  className={`min-w-[96px] shrink-0 snap-start rounded-md border px-3 py-2.5 text-left transition sm:w-[170px] sm:py-3 lg:w-auto ${
                     activeModule === module.id
                       ? "border-primary bg-primary text-primary-foreground shadow-sm"
                       : "border-border bg-card hover:border-primary/45"
                   }`}
                 >
-                  <span className="block text-sm font-semibold">
+                  <span className="block whitespace-nowrap text-sm font-semibold">
                     {module.name}
                   </span>
                   <span
-                    className={`mt-1 block text-xs ${
+                    className={`mt-1 hidden text-xs sm:block ${
                       activeModule === module.id
                         ? "text-primary-foreground/78"
                         : "text-muted-foreground"
@@ -793,7 +796,7 @@ export function LearningApp({
         ) : null}
 
         <section className="min-w-0 space-y-4 sm:space-y-5">
-          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+          <div className="hidden overflow-hidden rounded-lg border border-border bg-card shadow-sm sm:block">
             <div className="relative min-h-[190px] sm:min-h-[230px]">
               <img
                 src="/study-banner.webp"
@@ -823,22 +826,22 @@ export function LearningApp({
 
           {!loading && !account ? (
             <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
-              <h2 className="text-2xl font-bold tracking-tight">
+              <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
                 请先登录账号
               </h2>
               <p className="mt-3 text-sm text-muted-foreground">
                 登录后会根据账号身份显示可访问的学习或管理页面。
               </p>
-              <div className="mt-4 flex flex-wrap gap-3">
+              <div className="mt-4 grid gap-3 sm:flex sm:flex-wrap">
                 <a
                   href="/login"
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                  className="rounded-md bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground sm:py-2"
                 >
                   去登录
                 </a>
                 <a
                   href="/register"
-                  className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold"
+                  className="rounded-md border border-border bg-card px-4 py-3 text-center text-sm font-semibold sm:py-2"
                 >
                   注册账号
                 </a>
@@ -848,7 +851,7 @@ export function LearningApp({
 
           {!loading && account && !canViewActiveModule ? (
             <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
-              <h2 className="text-2xl font-bold tracking-tight">没有访问权限</h2>
+              <h2 className="text-xl font-bold tracking-tight sm:text-2xl">没有访问权限</h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
                 当前账号身份是 {account.user.role}，不能访问这个页面。请从左侧菜单进入当前身份可用的模块。
               </p>
@@ -857,7 +860,7 @@ export function LearningApp({
 
           {loading ? (
             <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
-              <h2 className="text-2xl font-bold tracking-tight">
+              <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
                 正在连接学习后端
               </h2>
               <p className="mt-3 text-sm text-muted-foreground">
@@ -873,7 +876,7 @@ export function LearningApp({
                   <p className="text-sm font-semibold text-teal-700">
                     今日推荐
                   </p>
-                  <h2 className="mt-1 text-2xl font-bold tracking-tight">
+                  <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">
                     15 分钟基础巩固
                   </h2>
                 </div>
@@ -980,7 +983,7 @@ export function LearningApp({
                   type="button"
                   onClick={startMistakePractice}
                   disabled={mistakes.length === 0 || dailyLoading}
-                  className="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  className="w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:py-2"
                 >
                   {dailyLoading ? "准备中" : "开始错题专项训练"}
                 </button>
@@ -1019,7 +1022,7 @@ export function LearningApp({
         </section>
 
         {account ? (
-          <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+          <aside className="hidden space-y-5 lg:sticky lg:top-24 lg:block lg:self-start">
             <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold">学习连续天数</h2>
@@ -1212,11 +1215,11 @@ function VocabularyStudyPanel({
   return (
     <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-teal-700">先学再练</p>
           <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">词汇学习卡</h2>
         </div>
-        <div className="grid gap-2 sm:flex">
+        <div className="grid min-w-0 gap-2 sm:flex">
           <button
             type="button"
             onClick={onStartSpelling}
@@ -1236,7 +1239,7 @@ function VocabularyStudyPanel({
       </div>
 
       <form
-        className="mt-4 rounded-md border border-border bg-background p-3 sm:mt-5 sm:p-4"
+        className="mt-4 min-w-0 rounded-md border border-border bg-background p-3 sm:mt-5 sm:p-4"
         onSubmit={(event) => {
           event.preventDefault();
           void searchVocabulary();
@@ -1299,7 +1302,7 @@ function VocabularyStudyPanel({
                   <h3 className="break-words text-xl font-black tracking-tight sm:text-2xl">
                     {item.word}
                   </h3>
-                  <p className="mt-1 text-sm font-semibold text-teal-700">
+                  <p className="mt-1 break-words text-sm font-semibold text-teal-700">
                     {item.partOfSpeech || "词汇"} · {item.meaning}
                   </p>
                 </div>
@@ -1311,7 +1314,7 @@ function VocabularyStudyPanel({
                 />
               </div>
               {item.example ? (
-                <p className="mt-3 rounded-md bg-secondary p-3 text-sm leading-6 text-secondary-foreground">
+                <p className="mt-3 break-words rounded-md bg-secondary p-3 text-sm leading-6 text-secondary-foreground">
                   {item.example}
                 </p>
               ) : null}
@@ -1351,7 +1354,7 @@ function VocabularyLookupCard({ item }: { item: VocabularyItem }) {
               </span>
             ) : null}
           </div>
-          <p className="mt-2 text-sm font-semibold text-teal-700">
+          <p className="mt-2 break-words text-sm font-semibold text-teal-700">
             {item.partOfSpeech || "词汇"} · {item.meaning}
           </p>
         </div>
@@ -1363,7 +1366,7 @@ function VocabularyLookupCard({ item }: { item: VocabularyItem }) {
         />
       </div>
       {item.example ? (
-        <p className="mt-3 rounded-md bg-secondary p-3 text-sm leading-6 text-secondary-foreground">
+        <p className="mt-3 break-words rounded-md bg-secondary p-3 text-sm leading-6 text-secondary-foreground">
           {item.example}
         </p>
       ) : null}
@@ -1391,8 +1394,8 @@ function VocabularyLookupCard({ item }: { item: VocabularyItem }) {
 function ParentReportPanel({ report }: { report: ParentReport | null }) {
   if (!report) {
     return (
-      <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-        <h2 className="text-2xl font-bold tracking-tight">家长查看</h2>
+      <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
+        <h2 className="text-xl font-bold tracking-tight sm:text-2xl">家长查看</h2>
         <p className="mt-3 text-sm text-muted-foreground">
           正在整理最近学习记录。
         </p>
@@ -1401,13 +1404,13 @@ function ParentReportPanel({ report }: { report: ParentReport | null }) {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+    <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
       <div>
         <p className="text-sm font-semibold text-teal-700">学习概览</p>
-        <h2 className="mt-1 text-2xl font-bold tracking-tight">家长查看</h2>
+        <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">家长查看</h2>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
         <MetricCard label="连续学习" value={report.summary.streakDays} suffix="天" />
         <MetricCard label="近 7 天做题" value={report.summary.last7.total} />
         <MetricCard label="近 7 天答对" value={report.summary.last7.correct} />
@@ -1415,7 +1418,7 @@ function ParentReportPanel({ report }: { report: ParentReport | null }) {
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-md border border-border bg-background p-4">
+        <div className="min-w-0 rounded-md border border-border bg-background p-4">
           <h3 className="font-bold">模块表现</h3>
           <div className="mt-4 space-y-3">
             {report.progress.map((item) => (
@@ -1437,7 +1440,7 @@ function ParentReportPanel({ report }: { report: ParentReport | null }) {
           </div>
         </div>
 
-        <div className="rounded-md border border-border bg-background p-4">
+        <div className="min-w-0 rounded-md border border-border bg-background p-4">
           <h3 className="font-bold">高频薄弱点</h3>
           <div className="mt-3 space-y-2">
             {report.topWeakPoints.length === 0 ? (
@@ -1448,12 +1451,12 @@ function ParentReportPanel({ report }: { report: ParentReport | null }) {
               report.topWeakPoints.map((item) => (
                 <div
                   key={`${item.module}-${item.knowledgePoint}`}
-                  className="flex items-center justify-between gap-3 rounded-md bg-card px-3 py-2 text-sm"
+                  className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-card px-3 py-2 text-sm"
                 >
-                  <span>
+                  <span className="min-w-0 break-words">
                     {moduleLabels[item.module] || item.module} · {item.knowledgePoint}
                   </span>
-                  <span className="font-semibold text-coral-strong">
+                  <span className="shrink-0 font-semibold text-coral-strong">
                     错 {item.wrongCount} 次
                   </span>
                 </div>
@@ -1463,13 +1466,13 @@ function ParentReportPanel({ report }: { report: ParentReport | null }) {
         </div>
       </div>
 
-      <div className="mt-5 rounded-md border border-border bg-background p-4">
+      <div className="mt-5 min-w-0 rounded-md border border-border bg-background p-3 sm:p-4">
         <h3 className="font-bold">最近 14 天</h3>
-        <div className="mt-4 grid grid-cols-7 gap-2">
+        <div className="mt-4 grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1 sm:gap-2">
           {report.summary.calendar.map((day) => (
             <div
               key={day.date}
-              className={`rounded-md border p-2 text-center text-xs ${
+              className={`min-w-0 rounded-md border p-1 text-center text-[11px] sm:p-2 sm:text-xs ${
                 day.total > 0
                   ? "border-teal-300 bg-teal-50 text-teal-800"
                   : "border-border bg-card text-muted-foreground"
@@ -1521,13 +1524,13 @@ function ModuleOverview({
   }[module];
 
   return (
-    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-teal-700">
             {moduleLabels[module]}
           </p>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight">{title}</h2>
+          <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">{title}</h2>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
             {description}
           </p>
@@ -1538,7 +1541,7 @@ function ModuleOverview({
               type="button"
               onClick={onStartSpelling}
               disabled={loading}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:py-2"
             >
               {loading ? "准备中" : "开启拼写练习"}
             </button>
@@ -1547,20 +1550,20 @@ function ModuleOverview({
             type="button"
             onClick={onStart}
             disabled={loading}
-            className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold shadow-sm transition hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md border border-border bg-card px-4 py-3 text-sm font-semibold shadow-sm transition hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60 sm:py-2"
           >
             {loading ? "准备中" : buttonText}
           </button>
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid grid-cols-[repeat(3,minmax(0,1fr))] gap-2 sm:gap-3">
         <MetricCard label="掌握度" value={mastery} suffix="%" />
         <MetricCard label="已做题" value={total} />
         <MetricCard label="答对题" value={correct} />
       </div>
 
-      <div className="mt-4 rounded-md bg-secondary p-4 text-sm text-muted-foreground">
+      <div className="mt-4 rounded-md bg-secondary p-3 text-sm leading-6 text-muted-foreground sm:p-4">
         当前模块待复习错题：{mistakeCount} 道。点击开始后会进入单题训练页，首页不直接展示题目。
       </div>
     </section>
@@ -1673,9 +1676,9 @@ function MetricCard({
   suffix?: string;
 }) {
   return (
-    <div className="rounded-md border border-border bg-background p-4">
+    <div className="rounded-md border border-border bg-background p-3 sm:p-4">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-black">
+      <p className="mt-2 text-xl font-black sm:text-2xl">
         {value}
         {suffix}
       </p>

@@ -35,18 +35,18 @@ function AccountShell({
   children: React.ReactNode;
 }) {
   return (
-    <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6">
+    <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 sm:py-8">
       <section className="mx-auto max-w-3xl">
-        <div className="mb-5 flex items-center justify-between gap-3">
+        <div className="mb-4 flex items-center justify-between gap-3 sm:mb-5">
           <div>
             <p className="text-sm font-semibold text-teal-700">English Step</p>
-            <h1 className="mt-1 text-3xl font-black tracking-tight">{title}</h1>
+            <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">{title}</h1>
           </div>
           <a
             href="/"
-            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50"
+            className="shrink-0 rounded-md border border-border bg-card px-3 py-2.5 text-sm font-semibold transition hover:border-primary/50"
           >
-            返回学习首页
+            返回首页
           </a>
         </div>
         {children}
@@ -79,7 +79,7 @@ export function LoginPage() {
     <AccountShell title="登录账号">
       <form
         onSubmit={submit}
-        className="rounded-lg border border-border bg-card p-5 shadow-sm"
+        className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5"
       >
         {error ? (
           <p className="mb-4 rounded-md bg-coral-soft p-3 text-sm text-coral-strong">
@@ -91,7 +91,7 @@ export function LoginPage() {
           <input
             value={username}
             onChange={(event) => setUsername(event.target.value)}
-            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
           />
         </label>
         <label className="mt-4 block text-sm font-semibold">
@@ -100,7 +100,7 @@ export function LoginPage() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             type="password"
-            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
           />
         </label>
         <button
@@ -149,7 +149,7 @@ export function RegisterPage() {
     <AccountShell title="注册账号">
       <form
         onSubmit={submit}
-        className="rounded-lg border border-border bg-card p-5 shadow-sm"
+        className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5"
       >
         {error ? (
           <p className="mb-4 rounded-md bg-coral-soft p-3 text-sm text-coral-strong">
@@ -162,7 +162,7 @@ export function RegisterPage() {
               key={item}
               type="button"
               onClick={() => setRole(item)}
-              className={`rounded-md border px-3 py-2 text-sm font-semibold ${
+              className={`rounded-md border px-3 py-3 text-sm font-semibold sm:py-2 ${
                 role === item
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-background"
@@ -177,7 +177,7 @@ export function RegisterPage() {
           <input
             value={username}
             onChange={(event) => setUsername(event.target.value)}
-            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
           />
         </label>
         <label className="mt-4 block text-sm font-semibold">
@@ -186,7 +186,7 @@ export function RegisterPage() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             type="password"
-            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
           />
         </label>
         <label className="mt-4 block text-sm font-semibold">
@@ -194,7 +194,7 @@ export function RegisterPage() {
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
           />
         </label>
         {role === "student" ? (
@@ -205,7 +205,7 @@ export function RegisterPage() {
                 value={grade}
                 onChange={(event) => setGrade(Number(event.target.value))}
                 required
-                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
               >
                 {gradeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -220,7 +220,7 @@ export function RegisterPage() {
                 value={level}
                 onChange={(event) => setLevel(event.target.value)}
                 required
-                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
               >
                 {levelOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -357,15 +357,15 @@ export function AccountPage() {
   if (!account) {
     return (
       <AccountShell title="账号中心">
-        <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+        <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
           <p className="text-sm text-muted-foreground">
             {error || "还没有登录账号。"}
           </p>
-          <div className="mt-4 flex gap-3">
-            <a className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" href="/login">
+          <div className="mt-4 grid gap-3 sm:flex">
+            <a className="rounded-md bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground sm:py-2" href="/login">
               登录
             </a>
-            <a className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold" href="/register">
+            <a className="rounded-md border border-border bg-card px-4 py-3 text-center text-sm font-semibold sm:py-2" href="/register">
               注册
             </a>
           </div>
@@ -376,7 +376,7 @@ export function AccountPage() {
 
   return (
     <AccountShell title="账号中心">
-      <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+      <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
         {error ? (
           <p className="mb-4 rounded-md bg-coral-soft p-3 text-sm text-coral-strong">
             {error}
@@ -386,7 +386,7 @@ export function AccountPage() {
           <div>
             <p className="text-sm text-muted-foreground">账号 ID</p>
             <p className="mt-1 break-all font-mono text-sm">{account.user.id}</p>
-            <h2 className="mt-3 text-2xl font-black">
+            <h2 className="mt-3 text-xl font-black sm:text-2xl">
               {account.user.name} · {roleLabel(account.user.role)}
             </h2>
           </div>
@@ -396,7 +396,7 @@ export function AccountPage() {
               clearAccountUserId();
               window.location.href = "/login";
             }}
-            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold"
+            className="w-full rounded-md border border-border bg-card px-3 py-3 text-sm font-semibold sm:w-auto sm:py-2"
           >
             退出登录
           </button>
@@ -404,7 +404,7 @@ export function AccountPage() {
       </section>
 
       {account.user.role === "student" ? (
-        <section className="mt-5 rounded-lg border border-border bg-card p-5 shadow-sm">
+        <section className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:mt-5 sm:p-5">
           <h2 className="text-xl font-bold">学生关联</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             绑定后，家长可以查看学习情况；加入老师分组后，老师可以在分组中查看学习进度。
@@ -414,12 +414,12 @@ export function AccountPage() {
               value={parentUserId}
               onChange={(event) => setParentUserId(event.target.value)}
               placeholder="输入家长账号 ID"
-              className="rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+              className="rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
             />
             <button
               type="button"
               onClick={linkParent}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              className="rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground sm:py-2"
             >
               绑定家长
             </button>
@@ -429,12 +429,12 @@ export function AccountPage() {
               value={shareCode}
               onChange={(event) => setShareCode(event.target.value)}
               placeholder="输入老师分组分享 ID"
-              className="rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+              className="rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
             />
             <button
               type="button"
               onClick={joinGroup}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              className="rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground sm:py-2"
             >
               加入分组
             </button>
@@ -494,19 +494,19 @@ export function AccountPage() {
       ) : null}
 
       {account.user.role === "parent" ? (
-        <section className="mt-5 rounded-lg border border-border bg-card p-5 shadow-sm">
+        <section className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:mt-5 sm:p-5">
           <h2 className="text-xl font-bold">绑定孩子</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
             <input
               value={studentUserId}
               onChange={(event) => setStudentUserId(event.target.value)}
               placeholder="输入学生账号 ID"
-              className="rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+              className="rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
             />
             <button
               type="button"
               onClick={bindChild}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              className="rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground sm:py-2"
             >
               绑定孩子
             </button>
@@ -523,19 +523,19 @@ export function AccountPage() {
       ) : null}
 
       {account.user.role === "teacher" ? (
-        <section className="mt-5 rounded-lg border border-border bg-card p-5 shadow-sm">
+        <section className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:mt-5 sm:p-5">
           <h2 className="text-xl font-bold">老师分组</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
             <input
               value={groupName}
               onChange={(event) => setGroupName(event.target.value)}
               placeholder="例如：2026 初一英语基础班"
-              className="rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-primary"
+              className="rounded-md border border-border bg-background px-3 py-3 outline-none focus:border-primary sm:py-2"
             />
             <button
               type="button"
               onClick={createGroup}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              className="rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground sm:py-2"
             >
               创建分组
             </button>
@@ -544,16 +544,16 @@ export function AccountPage() {
             {(account.groups || []).map((group) => (
               <div
                 key={group.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-background p-3 text-sm"
+                className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-md bg-background p-3 text-sm"
               >
-                <span>
+                <span className="min-w-0 break-words">
                   {group.name} · 分享 ID：<strong>{group.shareCode}</strong> · 学生{" "}
                   {group.studentCount || 0} 人
                 </span>
                 <button
                   type="button"
                   onClick={() => openGroup(group.id)}
-                  className="rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold"
+                  className="w-full rounded-md border border-border bg-card px-3 py-3 text-sm font-semibold sm:w-auto sm:py-2"
                 >
                   查看学生
                 </button>
