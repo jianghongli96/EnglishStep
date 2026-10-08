@@ -155,7 +155,7 @@ export function LearningApp({
   );
   const [mistakes, setMistakes] = useState<Mistake[]>([]);
   const [progress, setProgress] = useState<ProgressItem[]>([]);
-  const [csvInput, setCsvInput] = useState(sampleCsv);
+  const [csvInput, setCsvInput] = useState("");
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [adminQuestions, setAdminQuestions] = useState<PracticeItem[]>([]);
@@ -1596,7 +1596,7 @@ function AdminPanel({
         <button
           type="button"
           onClick={onImport}
-          disabled={importing}
+          disabled={importing || !csvInput.trim()}
           className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {importing ? "正在生成题目" : "导入并生成题目"}
@@ -1610,6 +1610,7 @@ function AdminPanel({
       <textarea
         value={csvInput}
         onChange={(event) => onCsvChange(event.target.value)}
+        placeholder={sampleCsv}
         spellCheck={false}
         className="mt-4 min-h-[190px] w-full resize-y rounded-md border border-border bg-background p-4 font-mono text-sm leading-6 outline-none focus:border-primary"
       />
