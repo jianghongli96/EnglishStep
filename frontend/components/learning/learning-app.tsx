@@ -1077,6 +1077,36 @@ function VocabularyStudyPanel({
   vocabulary: VocabularyItem[];
   onReload: () => void;
 }) {
+  const [searchWord, setSearchWord] = useState("");
+  const [searchResults, setSearchResults] = useState<VocabularyItem[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+
+  async function searchVocabulary() {
+    const keyword = searchWord.trim();
+    setHasSearched(true);
+    setSearchError("");
+
+    if (!keyword) {
+      setSearchResults([]);
+      setSearchError("请输入要查询的英文单词。");
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const response = await api<{ vocabulary: VocabularyItem[] }>(
+        `/api/vocabulary/search?word=${encodeURIComponent(keyword)}&limit=8`,
+      );
+      setSearchResults(response.vocabulary);
+    } catch (error) {
+      setSearchError(error instanceof Error ? error.message : "单词查询失败。");
+    } finally {
+      setSearching(false);
+    }
+  }
+
   return (
     <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1092,6 +1122,54 @@ function VocabularyStudyPanel({
           换一批词
         </button>
       </div>
+
+      <form
+        className="mt-5 rounded-md border border-border bg-background p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void searchVocabulary();
+        }}
+      >
+        <label className="block text-sm font-semibold" htmlFor="vocabulary-search">
+          查询单词
+        </label>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            id="vocabulary-search"
+            value={searchWord}
+            onChange={(event) => setSearchWord(event.target.value)}
+            placeholder="输入英文单词，例如 shop"
+            className="min-h-11 flex-1 rounded-md border border-border bg-card px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+          <button
+            type="submit"
+            disabled={searching}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {searching ? "查询中" : "查询"}
+          </button>
+        </div>
+
+        {searchError ? (
+          <p className="mt-3 rounded-md bg-coral-soft p-3 text-sm text-coral-strong">
+            {searchError}
+          </p>
+        ) : null}
+
+        {hasSearched && !searching && !searchError ? (
+          searchResults.length > 0 ? (
+            <div className="mt-4 grid gap-3">
+              {searchResults.map((item) => (
+                <VocabularyLookupCard key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-md bg-secondary p-3 text-sm text-muted-foreground">
+              词库里暂时没有找到这个单词，可以先到词库管理导入后再查询。
+            </p>
+          )
+        ) : null}
+      </form>
 
       {vocabulary.length === 0 ? (
         <p className="mt-4 rounded-md bg-secondary p-4 text-sm text-muted-foreground">
@@ -1138,6 +1216,53 @@ function VocabularyStudyPanel({
         </div>
       )}
     </section>
+  );
+}
+
+function VocabularyLookupCard({ item }: { item: VocabularyItem }) {
+  return (
+    <article className="rounded-md border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h3 className="break-words text-2xl font-black tracking-tight">
+              {item.word}
+            </h3>
+            {item.phonetic ? (
+              <span className="text-sm font-semibold text-muted-foreground">
+                {item.phonetic}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-sm font-semibold text-teal-700">
+            {item.partOfSpeech || "词汇"} · {item.meaning}
+          </p>
+        </div>
+        <WordAudioButton word={item.word} label="播放" compact />
+      </div>
+      {item.example ? (
+        <p className="mt-3 rounded-md bg-secondary p-3 text-sm leading-6 text-secondary-foreground">
+          {item.example}
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        {item.grade ? (
+          <span className="rounded-md border border-border px-2 py-1">
+            年级 {item.grade}
+          </span>
+        ) : null}
+        {item.sourceBook ? (
+          <span className="rounded-md border border-border px-2 py-1">
+            {item.sourceBook}
+          </span>
+        ) : null}
+        {item.sourceUnit ? (
+          <span className="rounded-md border border-border px-2 py-1">
+            {item.sourceUnit}
+          </span>
+        ) : null}
+      </div>
+    </article>
   );
 }
 

@@ -1953,6 +1953,25 @@ function listStudyVocabulary(studentId, limit = 12) {
   }));
 }
 
+function searchVocabulary(word, limit = 10) {
+  const keyword = normalizeText(word).toLowerCase();
+  if (!keyword) return [];
+
+  return db
+    .prepare(
+      `SELECT *
+       FROM vocabulary
+       WHERE lower(word) = ?
+          OR lower(word) LIKE ?
+       ORDER BY CASE WHEN lower(word) = ? THEN 0 ELSE 1 END,
+                length(word) ASC,
+                created_at DESC
+       LIMIT ?`,
+    )
+    .all(keyword, `%${keyword}%`, keyword, limit)
+    .map(rowToVocabulary);
+}
+
 function listQuestions({ module, status, limit }) {
   const rows = db
     .prepare(
@@ -2122,6 +2141,17 @@ async function route(req, res) {
     }
 
     send(res, 200, { vocabulary: listStudyVocabulary(studentId, limit) });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/vocabulary/search") {
+    const user = requireAuth(req, res);
+    if (!user) return;
+
+    const word = url.searchParams.get("word") || "";
+    const limit = Number(url.searchParams.get("limit") || 10);
+    const vocabulary = searchVocabulary(word, limit);
+    send(res, 200, { vocabulary });
     return;
   }
 

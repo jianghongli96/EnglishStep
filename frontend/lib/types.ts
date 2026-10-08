@@ -43,6 +43,7 @@ export type VocabularyItem = {
   word: string;
   meaning: string;
   partOfSpeech?: string;
+  phonetic?: string;
   example?: string;
   grade?: string;
   sourceBook?: string;
