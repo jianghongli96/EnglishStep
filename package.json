@@ -8,6 +8,7 @@
     "build:frontend": "cd frontend && yarn build",
     "start:backend": "node backend/src/server.js",
     "import:ecdict": "node backend/scripts/import-ecdict.js",
+    "split:combined-vocabulary": "node backend/scripts/split-combined-vocabulary.js",
     "deploy": "bash scripts/deploy.sh",
     "deploy:with-db": "bash scripts/deploy.sh --with-db"
   },

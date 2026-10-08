@@ -316,6 +316,7 @@ function shouldImportToVocabulary(entry) {
 
 function generateVocabularyQuestions(vocab) {
   const createdAt = new Date().toISOString();
+  const baseDifficulty = questionDifficultyForVocabulary(vocab);
   const common = {
     module: "words",
     grade: vocab.grade,
@@ -340,7 +341,7 @@ function generateVocabularyQuestions(vocab) {
       ),
       answer: vocab.meaning,
       explain: `${vocab.word} 表示“${vocab.meaning}”。`,
-      difficulty: Math.max(1, vocab.difficulty),
+      difficulty: baseDifficulty,
     }),
     normalizeQuestion({
       ...common,
@@ -353,7 +354,7 @@ function generateVocabularyQuestions(vocab) {
       ),
       answer: vocab.word,
       explain: `“${vocab.meaning}”对应的英文是 ${vocab.word}。`,
-      difficulty: Math.max(1, vocab.difficulty),
+      difficulty: baseDifficulty,
     }),
     normalizeQuestion({
       ...common,
@@ -366,7 +367,7 @@ function generateVocabularyQuestions(vocab) {
       ),
       answer: vocab.word,
       explain: `根据句意和词义，这里应填 ${vocab.word}。`,
-      difficulty: Math.max(2, vocab.difficulty + 1),
+      difficulty: questionDifficultyForVocabulary(vocab, 1),
     }),
     normalizeQuestion({
       ...common,
@@ -378,7 +379,7 @@ function generateVocabularyQuestions(vocab) {
       options: [],
       answer: vocab.word,
       explain: `“${vocab.meaning}”对应的英文是 ${vocab.word}。`,
-      difficulty: Math.max(1, vocab.difficulty),
+      difficulty: baseDifficulty,
     }),
   ];
 }
@@ -486,11 +487,30 @@ function inferPartOfSpeech(translation) {
 }
 
 function difficultyFromFrequency(entry) {
-  const ranks = [entry.bnc, entry.frq].filter((value) => Number(value) > 0);
-  const rank = ranks.length ? Math.min(...ranks) : 0;
-  if (!rank || rank > 10000) return 3;
-  if (rank > 5000) return 2;
-  return 1;
+  const rank = frequencyRank(entry);
+  if (!rank) return clampDifficulty(entry?.difficulty || 1);
+  if (rank <= 1000) return 1;
+  if (rank <= 3000) return 2;
+  if (rank <= 8000) return 3;
+  if (rank <= 15000) return 4;
+  return 5;
+}
+
+function frequencyRank(entry) {
+  const ranks = [entry?.bnc, entry?.frq]
+    .map((value) => Number(value || 0))
+    .filter((value) => value > 0);
+  return ranks.length ? Math.min(...ranks) : 0;
+}
+
+function questionDifficultyForVocabulary(vocab, offset = 0) {
+  return clampDifficulty(difficultyFromFrequency(vocab) + offset);
+}
+
+function clampDifficulty(value) {
+  const number = Number(value || 1);
+  if (!Number.isFinite(number)) return 1;
+  return Math.min(5, Math.max(1, Math.round(number)));
 }
 
 function buildOptions(answer, candidates) {

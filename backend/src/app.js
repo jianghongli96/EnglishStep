@@ -63,6 +63,7 @@ db.exec("PRAGMA foreign_keys = ON");
 db.exec("PRAGMA journal_mode = WAL");
 initSchema(db);
 ensureVocabularyUuidIds();
+ensureVocabularyDifficultyFromFrequency();
 ensureBuiltInAdminAccount();
 if (AUTO_SEED_DATABASE && (isNewDatabase || countRows("questions") === 0)) {
   await seedDatabase();
@@ -442,6 +443,33 @@ function isUuid(value) {
   );
 }
 
+function clampDifficulty(value) {
+  const number = Number(value || 1);
+  if (!Number.isFinite(number)) return 1;
+  return Math.min(5, Math.max(1, Math.round(number)));
+}
+
+function frequencyRank(entry) {
+  const ranks = [entry?.bnc, entry?.frq]
+    .map((value) => Number(value || 0))
+    .filter((value) => value > 0);
+  return ranks.length ? Math.min(...ranks) : 0;
+}
+
+function difficultyFromFrequency(entry, fallback = 1) {
+  const rank = frequencyRank(entry);
+  if (!rank) return clampDifficulty(fallback);
+  if (rank <= 1000) return 1;
+  if (rank <= 3000) return 2;
+  if (rank <= 8000) return 3;
+  if (rank <= 15000) return 4;
+  return 5;
+}
+
+function questionDifficultyForVocabulary(vocab, offset = 0) {
+  return clampDifficulty(difficultyFromFrequency(vocab, vocab?.difficulty || 1) + offset);
+}
+
 function ensureVocabularyUuidIds() {
   const rows = db.prepare("SELECT id FROM vocabulary").all();
   const migrations = rows
@@ -466,6 +494,31 @@ function ensureVocabularyUuidIds() {
   } finally {
     db.exec("PRAGMA foreign_keys = ON");
   }
+}
+
+function ensureVocabularyDifficultyFromFrequency() {
+  const rows = db
+    .prepare("SELECT id, difficulty, bnc, frq FROM vocabulary WHERE bnc > 0 OR frq > 0")
+    .all();
+  if (rows.length === 0) return;
+
+  withTransaction(() => {
+    const updateVocabulary = db.prepare("UPDATE vocabulary SET difficulty = ? WHERE id = ?");
+    const updateQuestions = db.prepare(`
+      UPDATE questions
+      SET difficulty = CASE
+        WHEN type = 'sentence_blank' THEN ?
+        ELSE ?
+      END
+      WHERE vocabulary_id = ?
+    `);
+
+    for (const row of rows) {
+      const baseDifficulty = difficultyFromFrequency(row, row.difficulty || 1);
+      updateVocabulary.run(baseDifficulty, row.id);
+      updateQuestions.run(clampDifficulty(baseDifficulty + 1), baseDifficulty, row.id);
+    }
+  });
 }
 
 function send(res, status, payload) {
@@ -1955,24 +2008,27 @@ function normalizeVocabulary(item) {
   const sourceBook = normalizeText(item.sourceBook || item.source_book || "");
   const sourceUnit = normalizeText(item.sourceUnit || item.source_unit || "");
   const id = isUuid(item.id) ? item.id : randomUUID();
+  const bnc = Number(item.bnc || 0);
+  const frq = Number(item.frq || 0);
+  const explicitDifficulty = Number(item.difficulty || 0);
 
   return {
     id,
     word,
     meaning,
     partOfSpeech: normalizeText(item.partOfSpeech || item.part_of_speech || ""),
-	    phonetic: normalizeText(item.phonetic || ""),
-	    example: normalizeText(item.example || ""),
-	    grade: normalizeText(item.grade || "初中"),
-	    semester: normalizeText(item.semester || ""),
-	    sourceBook,
-	    sourceUnit,
-	    difficulty: Number(item.difficulty || 1),
-	    tag: normalizeText(item.tag || ""),
-	    bnc: Number(item.bnc || 0),
-	    frq: Number(item.frq || 0),
-	    tags: normalizeTags(item.tags || item.tag),
-	    createdAt: item.createdAt || now,
+    phonetic: normalizeText(item.phonetic || ""),
+    example: normalizeText(item.example || ""),
+    grade: normalizeText(item.grade || "初中"),
+    semester: normalizeText(item.semester || ""),
+    sourceBook,
+    sourceUnit,
+    difficulty: difficultyFromFrequency({ bnc, frq }, explicitDifficulty || 1),
+    tag: normalizeText(item.tag || ""),
+    bnc,
+    frq,
+    tags: normalizeTags(item.tags || item.tag),
+    createdAt: item.createdAt || now,
   };
 }
 
@@ -1982,8 +2038,8 @@ function cleanVocabularyWord(value) {
 
 function normalizeTags(tags) {
   if (Array.isArray(tags)) return tags.map(normalizeText).filter(Boolean);
-	  return String(tags || "")
-	    .split(/[\s|,，、]+/)
+  return String(tags || "")
+    .split(/[\s|,，、]+/)
     .map(normalizeText)
     .filter(Boolean);
 }
@@ -1991,13 +2047,13 @@ function normalizeTags(tags) {
 function insertVocabulary(vocab) {
   const result = db
     .prepare(
-	      `INSERT OR IGNORE INTO vocabulary (
-	        id, word, meaning, part_of_speech, phonetic, example, grade, semester,
-	        source_book, source_unit, difficulty, tag, bnc, frq, tags_json, created_at
-	      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-	    )
-	    .run(
-	      vocab.id,
+      `INSERT OR IGNORE INTO vocabulary (
+        id, word, meaning, part_of_speech, phonetic, example, grade, semester,
+        source_book, source_unit, difficulty, tag, bnc, frq, tags_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      vocab.id,
       vocab.word,
       vocab.meaning,
       vocab.partOfSpeech,
@@ -2005,20 +2061,21 @@ function insertVocabulary(vocab) {
       vocab.example,
       vocab.grade,
       vocab.semester,
-	      vocab.sourceBook,
-	      vocab.sourceUnit,
-	      vocab.difficulty,
-	      vocab.tag,
-	      vocab.bnc,
-	      vocab.frq,
-	      JSON.stringify(vocab.tags),
-	      vocab.createdAt,
+      vocab.sourceBook,
+      vocab.sourceUnit,
+      vocab.difficulty,
+      vocab.tag,
+      vocab.bnc,
+      vocab.frq,
+      JSON.stringify(vocab.tags),
+      vocab.createdAt,
     );
   return result.changes > 0;
 }
 
 function generateVocabularyQuestions(vocab, status) {
   const createdAt = new Date().toISOString();
+  const baseDifficulty = questionDifficultyForVocabulary(vocab);
   const common = {
     module: "words",
     grade: vocab.grade,
@@ -2040,7 +2097,7 @@ function generateVocabularyQuestions(vocab, status) {
       options: buildOptions(vocab.meaning, meaningDistractors(vocab)),
       answer: vocab.meaning,
       explain: `${vocab.word} 表示“${vocab.meaning}”。`,
-      difficulty: Math.max(1, vocab.difficulty),
+      difficulty: baseDifficulty,
     }),
     normalizeQuestion({
       ...common,
@@ -2050,7 +2107,7 @@ function generateVocabularyQuestions(vocab, status) {
       options: buildOptions(vocab.word, wordDistractors(vocab)),
       answer: vocab.word,
       explain: `“${vocab.meaning}”对应的英文是 ${vocab.word}。`,
-      difficulty: Math.max(1, vocab.difficulty),
+      difficulty: baseDifficulty,
     }),
     normalizeQuestion({
       ...common,
@@ -2060,7 +2117,7 @@ function generateVocabularyQuestions(vocab, status) {
       options: buildOptions(vocab.word, wordDistractors(vocab)),
       answer: vocab.word,
       explain: `根据句意和词义，这里应填 ${vocab.word}。`,
-      difficulty: Math.max(2, vocab.difficulty + 1),
+      difficulty: questionDifficultyForVocabulary(vocab, 1),
     }),
     spellingQuestionForVocabulary(vocab, status),
   ];
@@ -2085,7 +2142,7 @@ function spellingQuestionForVocabulary(vocab, status = "published") {
     options: [],
     answer: vocab.word,
     explain: `“${vocab.meaning}”对应的英文是 ${vocab.word}。`,
-    difficulty: Math.max(1, Number(vocab.difficulty || 1)),
+    difficulty: questionDifficultyForVocabulary(vocab),
   });
 }
 
