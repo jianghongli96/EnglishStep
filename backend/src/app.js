@@ -45,6 +45,11 @@ const jsonHeaders = {
 
 const fallbackMeanings = ["归还", "购买", "丢失", "携带", "打开", "关闭"];
 const fallbackWords = ["learn", "review", "write", "listen", "speak", "read"];
+const builtInAdmin = {
+  username: "admin",
+  password: "jiang2026",
+  name: "管理员",
+};
 const dailyTaskPlan = [
   { id: "daily-words", module: "words", title: "核心词汇", target: 8 },
   { id: "daily-grammar", module: "grammar", title: "基础语法", target: 6 },
@@ -57,6 +62,7 @@ const db = new DatabaseSync(DB_PATH);
 db.exec("PRAGMA foreign_keys = ON");
 db.exec("PRAGMA journal_mode = WAL");
 initSchema(db);
+ensureBuiltInAdminAccount();
 if (AUTO_SEED_DATABASE && (isNewDatabase || countRows("questions") === 0)) {
   await seedDatabase();
 }
@@ -559,6 +565,33 @@ function rowToMistake(row) {
 
 function normalizeUsername(value) {
   return normalizeText(value).toLowerCase();
+}
+
+function ensureBuiltInAdminAccount() {
+  const username = normalizeText(builtInAdmin.username);
+  const normalizedUsername = normalizeUsername(username);
+  const now = new Date().toISOString();
+  const { hash, salt } = hashPassword(builtInAdmin.password);
+  const existing = db
+    .prepare("SELECT id FROM users WHERE normalized_username = ?")
+    .get(normalizedUsername);
+
+  if (existing) {
+    db.prepare(
+      `UPDATE users
+       SET username = ?, name = ?, role = 'admin',
+           password_hash = ?, password_salt = ?
+       WHERE id = ?`,
+    ).run(username, builtInAdmin.name, hash, salt, existing.id);
+    return;
+  }
+
+  db.prepare(
+    `INSERT INTO users (
+      id, username, normalized_username, name, role,
+      password_hash, password_salt, created_at
+    ) VALUES (?, ?, ?, ?, 'admin', ?, ?, ?)`,
+  ).run(randomUUID(), username, normalizedUsername, builtInAdmin.name, hash, salt, now);
 }
 
 function requireAuth(req, res) {

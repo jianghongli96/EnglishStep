@@ -33,35 +33,35 @@ const modules = [
     name: "今日任务",
     detail: "10-20 分钟完成一个小闭环",
     href: "/",
-    roles: ["student"],
+    roles: ["student", "parent"],
   },
   {
     id: "words",
     name: "词汇练习",
     detail: "先学词，再做题",
     href: "/vocabulary",
-    roles: ["student"],
+    roles: ["student", "parent"],
   },
   {
     id: "grammar",
     name: "语法基础",
     detail: "先理解，再做题巩固",
     href: "/grammar",
-    roles: ["student"],
+    roles: ["student", "parent"],
   },
   {
     id: "reading",
     name: "分级阅读",
     detail: "短文 + 生词 + 题目解析",
     href: "/reading",
-    roles: ["student"],
+    roles: ["student", "parent"],
   },
   {
     id: "mistakes",
     name: "错题本",
     detail: "自动收集薄弱点",
     href: "/mistakes",
-    roles: ["student"],
+    roles: ["student", "parent"],
   },
   {
     id: "parent",
@@ -241,9 +241,14 @@ export function LearningApp({
           if (firstChild) {
             const childStudent = childToStudent(firstChild);
             setStudent(childStudent);
-            if (initialModule === "parent") {
-              await loadParentReport(childStudent.id);
-            }
+            await Promise.all([
+              loadProfile(childStudent.id),
+              loadQuestions(childStudent.id, "words"),
+              loadQuestions(childStudent.id, "reading"),
+              initialModule === "parent"
+                ? loadParentReport(childStudent.id)
+                : Promise.resolve(),
+            ]);
           }
           return;
         }
