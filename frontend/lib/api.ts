@@ -1,14 +1,13 @@
 const env = import.meta.env as Record<string, string | undefined>;
 const configuredApiBase =
-  env.NEXT_PUBLIC_API_BASE_URL ||
   env.VITE_API_BASE_URL ||
-  (typeof process === "undefined" ? "" : process.env.NEXT_PUBLIC_API_BASE_URL || "") ||
+  env.NEXT_PUBLIC_API_BASE_URL ||
   "same-origin";
 const API_BASE = configuredApiBase === "same-origin" ? "" : configuredApiBase;
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (!API_BASE && configuredApiBase !== "same-origin") {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
+    throw new Error("API base URL is not configured.");
   }
 
   const token =

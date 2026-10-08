@@ -27,8 +27,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate deploy script
-        run: bash -n scripts/deploy.sh
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.14.0"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Setup Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+
+      - name: Validate backend
+        run: |
+          for file in backend/src/*.js; do
+            node --check "$file"
+          done
+
+      - name: Build frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || vars.NEXT_PUBLIC_API_BASE_URL || 'same-origin' }}
+        run: |
+          cd frontend
+          yarn install --frozen-lockfile
+          yarn build
 
       - name: Configure SSH
         env:
@@ -61,20 +84,48 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
 
-      - name: Deploy
+      - name: Upload release files
         env:
-          SSH_TARGET: aliyun-deploy
+          REMOTE_DIR: ${{ vars.REMOTE_DIR || '/var/www/english-learning' }}
+          PRUNE: ${{ github.event.inputs.prune || 'false' }}
+        run: |
+          backend_rsync_args=(-az)
+          if [[ "$PRUNE" == "true" ]]; then
+            backend_rsync_args+=(--delete)
+          fi
+
+          ssh aliyun-deploy "mkdir -p '$REMOTE_DIR/backend' '$REMOTE_DIR/frontend/dist' '$REMOTE_DIR/deploy/nginx'"
+
+          rsync "${backend_rsync_args[@]}" \
+            --exclude ".env" \
+            --exclude "data/*.db" \
+            --exclude "data/*.db-shm" \
+            --exclude "data/*.db-wal" \
+            backend/ "aliyun-deploy:$REMOTE_DIR/backend/"
+
+          rsync -az --delete frontend/dist/ "aliyun-deploy:$REMOTE_DIR/frontend/dist/"
+          rsync -az deploy/nginx/english-learning.conf "aliyun-deploy:$REMOTE_DIR/deploy/nginx/english-learning.conf"
+
+      - name: Restart server
+        env:
           REMOTE_DIR: ${{ vars.REMOTE_DIR || '/var/www/english-learning' }}
           NODE_BIN_DIR: ${{ vars.NODE_BIN_DIR || '/opt/node-v24.11.0-linux-x64/bin' }}
           BACKEND_APP: english-learning-backend
-          FRONTEND_APP: english-learning-frontend
-          FRONTEND_HOST: 127.0.0.1
-          FRONTEND_PORT: "4011"
-          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || 'same-origin' }}
-          PRUNE: ${{ github.event.inputs.prune || 'false' }}
+          NGINX_CONF_PATH: ${{ vars.NGINX_CONF_PATH || '/etc/nginx/conf.d/english-learning.conf' }}
         run: |
-          args=()
-          if [[ "$PRUNE" == "true" ]]; then
-            args+=(--prune)
-          fi
-          ./scripts/deploy.sh "${args[@]}"
+          ssh aliyun-deploy "set -e
+          export PATH='$NODE_BIN_DIR':\$PATH
+
+          cd '$REMOTE_DIR'
+          pm2 describe '$BACKEND_APP' >/dev/null 2>&1 \
+            && pm2 restart '$BACKEND_APP' --update-env \
+            || pm2 start '$NODE_BIN_DIR/node' --name '$BACKEND_APP' --cwd '$REMOTE_DIR' -- backend/src/server.js
+
+          pm2 describe english-learning-frontend >/dev/null 2>&1 && pm2 delete english-learning-frontend || true
+
+          cp '$REMOTE_DIR/deploy/nginx/english-learning.conf' '$NGINX_CONF_PATH'
+          nginx -t
+          nginx -s reload
+          pm2 save
+          pm2 list
+          "

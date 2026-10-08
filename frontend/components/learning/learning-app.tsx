@@ -7,7 +7,6 @@ import { WordAudioButton } from "@/components/learning/word-audio-button";
 import { loadCurrentAccount } from "@/lib/account";
 import { api } from "@/lib/api";
 import { getQuestionSpeakWord } from "@/lib/speech";
-import { gradeLabel } from "@/lib/student-options";
 import type {
   AccountPayload,
   DailyPlan,
@@ -604,7 +603,7 @@ export function LearningApp({
             >
               {account ? "账号" : "登录"}
             </a>
-            {currentRole === "student" ? (
+            {/* {currentRole === "student" ? (
               <button
                 type="button"
                 onClick={startDailyPractice}
@@ -613,7 +612,7 @@ export function LearningApp({
               >
                 {dailyLoading ? "准备中" : "开始 15 分钟"}
               </button>
-            ) : null}
+            ) : null} */}
           </div>
         </div>
       </header>

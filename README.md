@@ -2,7 +2,7 @@
 
 给基础薄弱的初高中学生使用的英语练习网站。当前项目拆成两个部分：
 
-- `frontend/`：学习网站界面，基于 Vinext/React。
+- `frontend/`：学习网站界面，基于 Vite/React，生产环境构建为静态 SPA。
 - `backend/`：MVP 学习 API，使用 Node.js 内置 HTTP 服务和 SQLite。
 
 ## 本地启动
@@ -80,13 +80,13 @@ GET /api/admin/questions?module=words
 /var/www/english-learning
 ```
 
-普通代码部署：
+本地手动部署：
 
 ```bash
 npm run deploy
 ```
 
-这个命令会同步代码、在服务器安装依赖、构建前端、重启 pm2，并 reload nginx。默认不会覆盖服务器数据库。
+这个命令会同步代码、在服务器安装依赖、构建静态前端、重启后端 pm2，并 reload nginx。默认不会覆盖服务器数据库。
 
 普通部署默认也不会删除服务器上多余的旧文件。如果要清理远端已经废弃的文件，可以先预览：
 
@@ -116,7 +116,6 @@ backend/data/english-learning.db
 
 ```text
 english-learning-backend   127.0.0.1:4010
-english-learning-frontend  127.0.0.1:4011
 nginx external             0.0.0.0:8081
 ```
 
@@ -126,6 +125,15 @@ nginx 配置文件：
 /etc/nginx/conf.d/english-learning.conf
 ```
 
+仓库内保留了对应模板：
+
+```text
+deploy/nginx/english-learning.conf
+```
+
+线上 nginx 会直接读取 `frontend/dist/` 静态文件，`/assets/` 和横幅图片等资源设置了
+30 天缓存；前端路由统一回退到 `index.html`，接口代理到后端服务。
+
 ## GitHub Actions 自动部署
 
 仓库已添加 workflow：
@@ -134,7 +142,16 @@ nginx 配置文件：
 .github/workflows/deploy.yml
 ```
 
-推送到 `main` 分支时会自动部署到服务器，也可以在 GitHub Actions 页面手动触发。
+推送到 `main` 分支时会自动部署到服务器，也可以在 GitHub Actions 页面手动触发。Actions 不再调用本地 `scripts/deploy.sh`，而是在 workflow 中直接完成这些步骤：
+
+```text
+1. 校验后端 JS 语法
+2. 在 GitHub runner 上安装前端依赖并构建 Vite 静态产物
+3. 通过 rsync 上传 backend/、frontend/dist/ 和 nginx 配置
+4. 在服务器上重启后端 pm2，并 reload nginx
+```
+
+这种方式让线上部署逻辑完整保存在 `.github/workflows/deploy.yml` 中，本地脚本只作为手动备用工具。
 
 需要在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions` 中配置这些 Secrets：
 

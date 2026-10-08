@@ -5,10 +5,8 @@ SSH_TARGET="${SSH_TARGET:-aliyun}"
 REMOTE_DIR="${REMOTE_DIR:-/var/www/english-learning}"
 NODE_BIN_DIR="${NODE_BIN_DIR:-/opt/node-v24.11.0-linux-x64/bin}"
 BACKEND_APP="${BACKEND_APP:-english-learning-backend}"
-FRONTEND_APP="${FRONTEND_APP:-english-learning-frontend}"
-FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
-FRONTEND_PORT="${FRONTEND_PORT:-4011}"
-NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-same-origin}"
+NGINX_CONF_PATH="${NGINX_CONF_PATH:-/etc/nginx/conf.d/english-learning.conf}"
+VITE_API_BASE_URL="${VITE_API_BASE_URL:-${NEXT_PUBLIC_API_BASE_URL:-same-origin}}"
 UPLOAD_DB=false
 DRY_RUN=false
 PRUNE_REMOTE=false
@@ -29,8 +27,9 @@ Environment overrides:
   SSH_TARGET     SSH host alias. Default: aliyun
   REMOTE_DIR     Server project directory. Default: /var/www/english-learning
   NODE_BIN_DIR   Server Node.js bin directory. Default: /opt/node-v24.11.0-linux-x64/bin
-  FRONTEND_PORT  Internal frontend port. Default: 4011
-  NEXT_PUBLIC_API_BASE_URL
+  NGINX_CONF_PATH
+                Server nginx config path. Default: /etc/nginx/conf.d/english-learning.conf
+  VITE_API_BASE_URL
                 Frontend API base URL. Default: same-origin
 USAGE
 }
@@ -71,8 +70,6 @@ RSYNC_ARGS=(
   --exclude "frontend/node_modules/"
   --exclude "frontend/dist/"
   --exclude "frontend/.next/"
-  --exclude "frontend/.vinext/"
-  --exclude "frontend/.wrangler/"
   --exclude "frontend/outputs/"
   --exclude "frontend/work/"
   --exclude "backend/.env"
@@ -125,7 +122,7 @@ fi
 
 ssh "$SSH_TARGET" "set -e
 export PATH='$NODE_BIN_DIR':\$PATH
-export NEXT_PUBLIC_API_BASE_URL='$NEXT_PUBLIC_API_BASE_URL'
+export VITE_API_BASE_URL='$VITE_API_BASE_URL'
 cd '$REMOTE_DIR/frontend'
 yarn install
 yarn build
@@ -135,11 +132,7 @@ pm2 describe '$BACKEND_APP' >/dev/null 2>&1 \\
   && pm2 restart '$BACKEND_APP' --update-env \\
   || pm2 start '$NODE_BIN_DIR/node' --name '$BACKEND_APP' --cwd '$REMOTE_DIR' -- backend/src/server.js
 
-cd '$REMOTE_DIR/frontend'
-pm2 describe '$FRONTEND_APP' >/dev/null 2>&1 \\
-  && pm2 restart '$FRONTEND_APP' --update-env \\
-  || pm2 start ./node_modules/.bin/vinext --name '$FRONTEND_APP' --cwd '$REMOTE_DIR/frontend' -- start --hostname '$FRONTEND_HOST' --port '$FRONTEND_PORT'
-
+cp '$REMOTE_DIR/deploy/nginx/english-learning.conf' '$NGINX_CONF_PATH'
 pm2 save
 nginx -t
 nginx -s reload
