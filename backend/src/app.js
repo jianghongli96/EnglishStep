@@ -1132,7 +1132,26 @@ function recommendSpellingQuestions(studentId, limit = 10) {
     `,
     )
     .all(recentCutoff, studentId, studentId, limit)
-    .map((row) => publicQuestion(rowToQuestion(row, false)));
+    .map((row) => publicQuestion(withSpellingPhonetic(rowToQuestion(row, true))));
+}
+
+function withSpellingPhonetic(question) {
+  if (!question || question.type !== "spelling" || !question.vocabularyId) {
+    return question;
+  }
+
+  const existingPhonetic = question.vocabulary?.find(Boolean);
+  if (existingPhonetic) return question;
+
+  const vocab = rowToVocabulary(
+    db.prepare("SELECT * FROM vocabulary WHERE id = ?").get(question.vocabularyId),
+  );
+  if (!vocab?.phonetic) return question;
+
+  return {
+    ...question,
+    vocabulary: [vocab.phonetic],
+  };
 }
 
 function selectRecommendedQuestionRows(studentId, module, limit = 5) {

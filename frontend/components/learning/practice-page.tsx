@@ -321,6 +321,7 @@ export function SpellingPracticePage({
   const [correctAnswer, setCorrectAnswer] = useState("");
   const [hasError, setHasError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const lastSubmittedAnswerRef = useRef("");
   const phonetic = question?.vocabulary?.find(Boolean) || "";
   const answerLength = Math.max(1, Number(question?.answerLength || 0));
 
@@ -329,14 +330,17 @@ export function SpellingPracticePage({
     setWrongAttempts(0);
     setCorrectAnswer("");
     setHasError(false);
+    lastSubmittedAnswerRef.current = "";
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, [question?.id]);
 
-  async function submitAnswer() {
-    if (!question || submitting || !typedAnswer.trim()) return;
+  async function submitAnswer(answer: string) {
+    if (!question || submitting || answer.length !== answerLength) return;
+    if (lastSubmittedAnswerRef.current === answer) return;
 
+    lastSubmittedAnswerRef.current = answer;
     setSubmitting(true);
-    const result = await onAnswer(question, typedAnswer);
+    const result = await onAnswer(question, answer);
     setSubmitting(false);
 
     if (!result) return;
@@ -348,10 +352,24 @@ export function SpellingPracticePage({
     setHasError(true);
   }
 
+  function updateSpellingAnswer(value: string) {
+    const nextAnswer = value
+      .toLowerCase()
+      .replace(/[^a-z'-]/g, "")
+      .slice(0, answerLength);
+
+    setTypedAnswer(nextAnswer);
+    setHasError(false);
+
+    if (nextAnswer.length === answerLength) {
+      void submitAnswer(nextAnswer);
+    }
+  }
+
   if (isComplete) {
     return (
       <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 sm:py-5">
-        <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-3xl flex-col justify-center sm:min-h-[calc(100vh-40px)]">
+        <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-5xl flex-col justify-center sm:min-h-[calc(100vh-40px)]">
           <section className="w-full rounded-lg border border-border bg-card p-4 text-center shadow-sm sm:p-6">
             <p className="text-sm font-semibold text-teal-700">{completionLabel}</p>
             <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
@@ -410,7 +428,7 @@ export function SpellingPracticePage({
 
   return (
     <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 sm:py-5">
-      <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-3xl flex-col sm:min-h-[calc(100vh-40px)]">
+      <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-5xl flex-col sm:min-h-[calc(100vh-40px)]">
         <header className="flex items-center justify-between gap-3">
           <button
             type="button"
@@ -443,63 +461,65 @@ export function SpellingPracticePage({
               </span>
             </div>
 
-            <p className="mt-5 text-sm font-semibold text-teal-700">中文意思</p>
+            <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <p className="text-sm font-semibold text-teal-700">中文意思</p>
+              {phonetic ? (
+                <p className="text-base font-semibold text-muted-foreground">
+                  音标：{phonetic}
+                </p>
+              ) : null}
+            </div>
             <h1 className="mt-2 break-words text-2xl font-black leading-tight tracking-tight sm:text-3xl">
               {question.prompt.replace(/^根据中文意思拼写单词：/, "")}
             </h1>
-            {phonetic ? (
-              <p className="mt-3 text-base font-semibold text-muted-foreground">
-                音标：{phonetic}
-              </p>
-            ) : null}
-            <form
-              className="mt-7"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitAnswer();
-              }}
-            >
-              <button
-                type="button"
+            <div className="mt-7">
+              <div
                 onClick={() => inputRef.current?.focus()}
-                className="grid w-full grid-flow-col justify-center gap-2 overflow-x-auto rounded-md bg-background p-4"
+                className="relative flex w-full cursor-text flex-wrap justify-center gap-x-2 gap-y-4 rounded-md bg-background p-4 sm:gap-x-3 sm:p-5"
                 aria-label="拼写输入框"
               >
                 {Array.from({ length: answerLength }).map((_, index) => (
                   <span
                     key={`${question.id}-${index}`}
-                    className={`flex h-12 w-9 items-center justify-center border-b-2 text-xl font-black uppercase sm:w-11 ${
+                    className={`relative flex h-14 w-8 items-center justify-center border-b-2 pt-3 text-lg font-black uppercase sm:w-10 sm:text-xl md:w-11 ${
                       hasError
                         ? "border-coral text-coral-strong"
                         : "border-foreground text-foreground"
                     }`}
                   >
+                    {!submitting && typedAnswer.length === index ? (
+                      <span
+                        className={`absolute top-0 h-5 w-0.5 animate-pulse rounded-full ${
+                          hasError ? "bg-coral" : "bg-primary"
+                        }`}
+                        aria-hidden="true"
+                      />
+                    ) : null}
                     {typedAnswer[index] || ""}
                   </span>
                 ))}
-              </button>
-              <input
-                ref={inputRef}
-                value={typedAnswer}
-                onChange={(event) => {
-                  setTypedAnswer(event.target.value.trim().toLowerCase());
-                  setHasError(false);
-                }}
-                autoCapitalize="none"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                className="mt-4 w-full rounded-md border border-border bg-background px-3 py-3 text-center text-lg font-bold tracking-[0.25em] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                placeholder="输入英文单词"
-              />
-              <button
-                type="submit"
-                disabled={submitting || !typedAnswer.trim()}
-                className="mt-4 w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitting ? "检查中" : "检查拼写"}
-              </button>
-            </form>
+                <input
+                  ref={inputRef}
+                  value={typedAnswer}
+                  onChange={(event) => updateSpellingAnswer(event.target.value)}
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  inputMode="text"
+                  aria-label="输入英文拼写"
+                  className="absolute inset-0 h-full w-full cursor-text opacity-0"
+                />
+              </div>
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                输入 {answerLength} 个字母后会自动检查
+              </p>
+              {submitting ? (
+                <p className="mt-2 text-center text-sm font-semibold text-teal-700">
+                  正在检查拼写
+                </p>
+              ) : null}
+            </div>
 
             {hasError ? (
               <section className="mt-5 rounded-md bg-coral-soft p-4 text-sm leading-6 text-coral-strong">
