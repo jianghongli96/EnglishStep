@@ -50,6 +50,9 @@ export type VocabularyItem = {
   sourceBook?: string;
   sourceUnit?: string;
   difficulty?: number;
+  tag?: string;
+  bnc?: number;
+  frq?: number;
   tags?: string[];
   masteryLevel?: number;
   lastPracticedAt?: string;

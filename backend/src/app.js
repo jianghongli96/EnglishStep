@@ -34,7 +34,7 @@ import {
   studentGradeForResponse,
   studentLevelForResponse,
 } from "./student-options.js";
-import { normalizeText, parseJson, publicQuestion, slugify } from "./utils.js";
+import { normalizeText, parseJson, publicQuestion } from "./utils.js";
 
 const jsonHeaders = {
   "content-type": "application/json; charset=utf-8",
@@ -62,6 +62,7 @@ const db = new DatabaseSync(DB_PATH);
 db.exec("PRAGMA foreign_keys = ON");
 db.exec("PRAGMA journal_mode = WAL");
 initSchema(db);
+ensureVocabularyUuidIds();
 ensureBuiltInAdminAccount();
 if (AUTO_SEED_DATABASE && (isNewDatabase || countRows("questions") === 0)) {
   await seedDatabase();
@@ -435,6 +436,38 @@ function withTransaction(work) {
   }
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || ""),
+  );
+}
+
+function ensureVocabularyUuidIds() {
+  const rows = db.prepare("SELECT id FROM vocabulary").all();
+  const migrations = rows
+    .filter((row) => !isUuid(row.id))
+    .map((row) => ({ oldId: row.id, newId: randomUUID() }));
+
+  if (migrations.length === 0) return;
+
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    withTransaction(() => {
+      const updateQuestions = db.prepare(
+        "UPDATE questions SET vocabulary_id = ? WHERE vocabulary_id = ?",
+      );
+      const updateVocabulary = db.prepare("UPDATE vocabulary SET id = ? WHERE id = ?");
+
+      for (const item of migrations) {
+        updateQuestions.run(item.newId, item.oldId);
+        updateVocabulary.run(item.newId, item.oldId);
+      }
+    });
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
 function send(res, status, payload) {
   writeJson(res, status, payload, jsonHeaders);
 }
@@ -511,11 +544,14 @@ function rowToVocabulary(row) {
     example: row.example,
     grade: row.grade,
     semester: row.semester,
-    sourceBook: row.source_book,
-    sourceUnit: row.source_unit,
-    difficulty: row.difficulty,
-    tags: parseJson(row.tags_json, []),
-    createdAt: row.created_at,
+	    sourceBook: row.source_book,
+	    sourceUnit: row.source_unit,
+	    difficulty: row.difficulty,
+	    tag: row.tag,
+	    bnc: Number(row.bnc || 0),
+	    frq: Number(row.frq || 0),
+	    tags: parseJson(row.tags_json, []),
+	    createdAt: row.created_at,
   };
 }
 
@@ -1918,24 +1954,25 @@ function normalizeVocabulary(item) {
   const meaning = normalizeText(item.meaning);
   const sourceBook = normalizeText(item.sourceBook || item.source_book || "");
   const sourceUnit = normalizeText(item.sourceUnit || item.source_unit || "");
-  const id =
-    item.id ||
-    `vocab-${slugify(sourceBook || "book")}-${slugify(sourceUnit || "unit")}-${slugify(word)}`;
+  const id = isUuid(item.id) ? item.id : randomUUID();
 
   return {
     id,
     word,
     meaning,
     partOfSpeech: normalizeText(item.partOfSpeech || item.part_of_speech || ""),
-    phonetic: normalizeText(item.phonetic || ""),
-    example: normalizeText(item.example || ""),
-    grade: normalizeText(item.grade || "初中"),
-    semester: normalizeText(item.semester || ""),
-    sourceBook,
-    sourceUnit,
-    difficulty: Number(item.difficulty || 1),
-    tags: normalizeTags(item.tags),
-    createdAt: item.createdAt || now,
+	    phonetic: normalizeText(item.phonetic || ""),
+	    example: normalizeText(item.example || ""),
+	    grade: normalizeText(item.grade || "初中"),
+	    semester: normalizeText(item.semester || ""),
+	    sourceBook,
+	    sourceUnit,
+	    difficulty: Number(item.difficulty || 1),
+	    tag: normalizeText(item.tag || ""),
+	    bnc: Number(item.bnc || 0),
+	    frq: Number(item.frq || 0),
+	    tags: normalizeTags(item.tags || item.tag),
+	    createdAt: item.createdAt || now,
   };
 }
 
@@ -1945,8 +1982,8 @@ function cleanVocabularyWord(value) {
 
 function normalizeTags(tags) {
   if (Array.isArray(tags)) return tags.map(normalizeText).filter(Boolean);
-  return String(tags || "")
-    .split(/[|,，、]/)
+	  return String(tags || "")
+	    .split(/[\s|,，、]+/)
     .map(normalizeText)
     .filter(Boolean);
 }
@@ -1954,13 +1991,13 @@ function normalizeTags(tags) {
 function insertVocabulary(vocab) {
   const result = db
     .prepare(
-      `INSERT OR IGNORE INTO vocabulary (
-        id, word, meaning, part_of_speech, phonetic, example, grade, semester,
-        source_book, source_unit, difficulty, tags_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      vocab.id,
+	      `INSERT OR IGNORE INTO vocabulary (
+	        id, word, meaning, part_of_speech, phonetic, example, grade, semester,
+	        source_book, source_unit, difficulty, tag, bnc, frq, tags_json, created_at
+	      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	    )
+	    .run(
+	      vocab.id,
       vocab.word,
       vocab.meaning,
       vocab.partOfSpeech,
@@ -1968,11 +2005,14 @@ function insertVocabulary(vocab) {
       vocab.example,
       vocab.grade,
       vocab.semester,
-      vocab.sourceBook,
-      vocab.sourceUnit,
-      vocab.difficulty,
-      JSON.stringify(vocab.tags),
-      vocab.createdAt,
+	      vocab.sourceBook,
+	      vocab.sourceUnit,
+	      vocab.difficulty,
+	      vocab.tag,
+	      vocab.bnc,
+	      vocab.frq,
+	      JSON.stringify(vocab.tags),
+	      vocab.createdAt,
     );
   return result.changes > 0;
 }
@@ -2054,7 +2094,8 @@ function ensureSpellingQuestions() {
     .prepare(
       `SELECT v.*
        FROM vocabulary v
-       LEFT JOIN questions q ON q.id = 'q-' || v.id || '-spelling'
+       LEFT JOIN questions q ON q.vocabulary_id = v.id
+        AND q.type = 'spelling'
        WHERE q.id IS NULL
        LIMIT 500`,
     )

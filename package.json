@@ -7,6 +7,7 @@
     "dev:frontend": "cd frontend && yarn dev",
     "build:frontend": "cd frontend && yarn build",
     "start:backend": "node backend/src/server.js",
+    "import:ecdict": "node backend/scripts/import-ecdict.js",
     "deploy": "bash scripts/deploy.sh",
     "deploy:with-db": "bash scripts/deploy.sh --with-db"
   },

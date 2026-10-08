@@ -20,12 +20,33 @@ export function initSchema(db) {
       grade TEXT,
       semester TEXT,
       source_book TEXT,
-      source_unit TEXT,
-      difficulty INTEGER NOT NULL DEFAULT 1,
-      tags_json TEXT NOT NULL DEFAULT '[]',
-      created_at TEXT NOT NULL,
-      UNIQUE(word, meaning, source_book, source_unit)
-    );
+	      source_unit TEXT,
+	      difficulty INTEGER NOT NULL DEFAULT 1,
+	      tag TEXT,
+	      bnc INTEGER NOT NULL DEFAULT 0,
+	      frq INTEGER NOT NULL DEFAULT 0,
+	      tags_json TEXT NOT NULL DEFAULT '[]',
+	      created_at TEXT NOT NULL,
+	      UNIQUE(word, meaning, source_book, source_unit)
+	    );
+
+	    CREATE TABLE IF NOT EXISTS dictionary_entries (
+	      id TEXT PRIMARY KEY,
+	      word TEXT NOT NULL,
+	      normalized_word TEXT NOT NULL UNIQUE,
+	      phonetic TEXT,
+	      definition TEXT,
+	      translation TEXT,
+	      part_of_speech TEXT,
+	      tag TEXT,
+	      bnc INTEGER NOT NULL DEFAULT 0,
+	      frq INTEGER NOT NULL DEFAULT 0,
+	      exchange TEXT,
+	      detail TEXT,
+	      audio TEXT,
+	      source TEXT NOT NULL DEFAULT 'ecdict',
+	      created_at TEXT NOT NULL
+	    );
 
     CREATE TABLE IF NOT EXISTS questions (
       id TEXT PRIMARY KEY,
@@ -161,18 +182,25 @@ export function initSchema(db) {
       ON attempts(student_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_mistakes_student
       ON mistakes(student_id, resolved_at);
-    CREATE INDEX IF NOT EXISTS idx_daily_plans_student_date
-      ON daily_plans(student_id, plan_date);
-    CREATE INDEX IF NOT EXISTS idx_parent_links_student
-      ON parent_student_links(student_user_id, status);
+	    CREATE INDEX IF NOT EXISTS idx_daily_plans_student_date
+	      ON daily_plans(student_id, plan_date);
+	    CREATE INDEX IF NOT EXISTS idx_dictionary_entries_normalized_word
+	      ON dictionary_entries(normalized_word);
+	    CREATE INDEX IF NOT EXISTS idx_dictionary_entries_tag
+	      ON dictionary_entries(tag);
+	    CREATE INDEX IF NOT EXISTS idx_parent_links_student
+	      ON parent_student_links(student_user_id, status);
     CREATE INDEX IF NOT EXISTS idx_group_members_student
       ON group_members(student_user_id, status);
   `);
 
-  ensureColumn(db, "mistakes", "review_count", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "mistakes", "correct_review_streak", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "mistakes", "last_reviewed_at", "TEXT");
-}
+	  ensureColumn(db, "mistakes", "review_count", "INTEGER NOT NULL DEFAULT 0");
+	  ensureColumn(db, "mistakes", "correct_review_streak", "INTEGER NOT NULL DEFAULT 0");
+	  ensureColumn(db, "mistakes", "last_reviewed_at", "TEXT");
+	  ensureColumn(db, "vocabulary", "tag", "TEXT");
+	  ensureColumn(db, "vocabulary", "bnc", "INTEGER NOT NULL DEFAULT 0");
+	  ensureColumn(db, "vocabulary", "frq", "INTEGER NOT NULL DEFAULT 0");
+	}
 
 function ensureColumn(db, table, column, definition) {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all();
