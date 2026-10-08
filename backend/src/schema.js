@@ -99,7 +99,9 @@ export function initSchema(db) {
       wrong_answer TEXT NOT NULL,
       review_count INTEGER NOT NULL DEFAULT 0,
       correct_review_streak INTEGER NOT NULL DEFAULT 0,
+      review_stage INTEGER NOT NULL DEFAULT 0,
       last_reviewed_at TEXT,
+      next_review_at TEXT,
       created_at TEXT NOT NULL,
       resolved_at TEXT,
       FOREIGN KEY(student_id) REFERENCES students(id),
@@ -117,6 +119,48 @@ export function initSchema(db) {
       next_review_at TEXT,
       UNIQUE(student_id, knowledge_point),
       FOREIGN KEY(student_id) REFERENCES students(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS student_learning_states (
+      student_id TEXT PRIMARY KEY,
+      frequency_frontier INTEGER NOT NULL DEFAULT 500,
+      question_level INTEGER NOT NULL DEFAULT 1,
+      diagnostic_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(diagnostic_status IN ('pending', 'in_progress', 'completed')),
+      diagnostic_score INTEGER,
+      vocabulary_score INTEGER,
+      grammar_score INTEGER,
+      reading_score INTEGER,
+      last_evaluated_attempt_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      diagnostic_completed_at TEXT,
+      FOREIGN KEY(student_id) REFERENCES students(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS diagnostic_sessions (
+      id TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('active', 'completed')),
+      question_ids_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      completed_at TEXT,
+      FOREIGN KEY(student_id) REFERENCES students(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS diagnostic_attempts (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      student_id TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      correct INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(session_id) REFERENCES diagnostic_sessions(id),
+      FOREIGN KEY(student_id) REFERENCES students(id),
+      FOREIGN KEY(question_id) REFERENCES questions(id),
+      UNIQUE(session_id, question_id)
     );
 
     CREATE TABLE IF NOT EXISTS daily_plans (
@@ -149,6 +193,8 @@ export function initSchema(db) {
       session_id TEXT NOT NULL,
       question_id TEXT NOT NULL,
       sort_order INTEGER NOT NULL,
+      purpose TEXT NOT NULL DEFAULT 'new'
+        CHECK(purpose IN ('review', 'reinforcement', 'new')),
       answered_at TEXT,
       correct INTEGER,
       FOREIGN KEY(session_id) REFERENCES practice_sessions(id),
@@ -217,6 +263,10 @@ export function initSchema(db) {
       ON questions(module, status, difficulty);
     CREATE INDEX IF NOT EXISTS idx_attempts_student
       ON attempts(student_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_diagnostic_sessions_student
+      ON diagnostic_sessions(student_id, status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_diagnostic_attempts_session
+      ON diagnostic_attempts(session_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_mistakes_student
       ON mistakes(student_id, resolved_at);
 	    CREATE INDEX IF NOT EXISTS idx_daily_plans_student_date
@@ -233,7 +283,10 @@ export function initSchema(db) {
 
 	  ensureColumn(db, "mistakes", "review_count", "INTEGER NOT NULL DEFAULT 0");
 	  ensureColumn(db, "mistakes", "correct_review_streak", "INTEGER NOT NULL DEFAULT 0");
+	  ensureColumn(db, "mistakes", "review_stage", "INTEGER NOT NULL DEFAULT 0");
 	  ensureColumn(db, "mistakes", "last_reviewed_at", "TEXT");
+	  ensureColumn(db, "mistakes", "next_review_at", "TEXT");
+	  ensureColumn(db, "session_questions", "purpose", "TEXT NOT NULL DEFAULT 'new'");
 	  ensureColumn(db, "vocabulary", "tag", "TEXT");
 	  ensureColumn(db, "vocabulary", "bnc", "INTEGER NOT NULL DEFAULT 0");
 	  ensureColumn(db, "vocabulary", "frq", "INTEGER NOT NULL DEFAULT 0");

@@ -7,8 +7,10 @@ export type Student = {
 
 export type DailyTask = {
   id: string;
-  module: string;
+  module?: string;
+  purpose?: "review" | "reinforcement" | "new";
   title: string;
+  detail?: string;
   target: number;
   completed: number;
   progress: number;
@@ -45,6 +47,7 @@ export type PracticeItem = {
   grade?: string;
   difficulty?: number;
   knowledgePoint?: string;
+  practicePurpose?: "review" | "reinforcement" | "new";
 };
 
 export type VocabularyItem = {
@@ -61,6 +64,9 @@ export type VocabularyItem = {
   tag?: string;
   bnc?: number;
   frq?: number;
+  frequencyRank?: number;
+  curriculumStage?: string;
+  curriculumFrequencyCeiling?: number;
   tags?: string[];
   masteryLevel?: number;
   lastPracticedAt?: string;
@@ -83,7 +89,10 @@ export type Mistake = {
   wrongAnswer: string;
   reviewCount: number;
   correctReviewStreak: number;
+  reviewStage: number;
   lastReviewedAt?: string;
+  nextReviewAt?: string;
+  isDue: boolean;
   question: PracticeItem | null;
 };
 
@@ -98,6 +107,29 @@ export type Feedback = {
   correct: boolean;
   correctAnswer: string;
   explain: string;
+};
+
+export type StudentLearningState = {
+  studentId: string;
+  frequencyFrontier: number;
+  questionLevel: number;
+  diagnosticStatus: "pending" | "in_progress" | "completed";
+  diagnosticScore?: number | null;
+  vocabularyScore?: number | null;
+  grammarScore?: number | null;
+  readingScore?: number | null;
+  lastEvaluatedAttemptCount: number;
+  diagnosticCompletedAt?: string | null;
+};
+
+export type DiagnosticPlan = {
+  sessionId?: string;
+  status: "active" | "completed";
+  currentIndex?: number;
+  correctCount?: number;
+  wrongCount?: number;
+  questions: PracticeItem[];
+  learningState: StudentLearningState;
 };
 
 export type PracticeKind =
@@ -179,6 +211,7 @@ export type AccountPayload = {
   token?: string;
   profile?: StudentProfile;
   student?: Student;
+  learningState?: StudentLearningState;
   children?: {
     user: AccountUser;
     profile: StudentProfile;

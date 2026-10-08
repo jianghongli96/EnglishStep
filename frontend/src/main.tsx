@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { AccountPage, LoginPage, RegisterPage } from "@/components/account/account-pages";
+import { DiagnosticPage } from "@/components/diagnostic/diagnostic-page";
 import { LearningApp } from "@/components/learning/learning-app";
 import { Toaster } from "@/components/ui/toast";
 import "@/src/globals.css";
@@ -23,6 +24,8 @@ function AppRoute() {
       return <RegisterPage />;
     case "/account":
       return <AccountPage />;
+    case "/diagnostic":
+      return <DiagnosticPage />;
     case "/vocabulary":
       return <LearningApp initialModule="words" />;
     case "/grammar":

@@ -12,6 +12,12 @@ const moduleLabels: Record<string, string> = {
   reading: "阅读理解",
 };
 
+const purposeLabels: Record<string, string> = {
+  review: "到期复习",
+  reinforcement: "薄弱巩固",
+  new: "新内容",
+};
+
 function getCompletionEncouragement(correctCount: number, wrongCount: number) {
   const totalCount = correctCount + wrongCount;
   const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
@@ -193,9 +199,16 @@ export function PracticePage({
           <div className="flex flex-1 items-center justify-center py-4 sm:py-8">
             <article className="w-full rounded-lg border border-border bg-card p-4 shadow-sm sm:p-7">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="rounded-md bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground">
-                  {moduleLabels[question.module] || title}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground">
+                    {moduleLabels[question.module] || title}
+                  </span>
+                  {question.practicePurpose ? (
+                    <span className="text-sm font-semibold text-teal-700">
+                      {purposeLabels[question.practicePurpose]}
+                    </span>
+                  ) : null}
+                </div>
                 <span className="text-sm text-muted-foreground">
                   难度 {question.difficulty || 1}
                 </span>

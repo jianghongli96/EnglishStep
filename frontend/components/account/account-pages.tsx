@@ -66,8 +66,12 @@ export function LoginPage() {
     setSubmitting(true);
     setError("");
     try {
-      await loginAccount(username, password);
-      window.location.href = "/account";
+      const account = await loginAccount(username, password);
+      window.location.href =
+        account.user.role === "student" &&
+        account.learningState?.diagnosticStatus !== "completed"
+          ? "/diagnostic"
+          : "/account";
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "登录失败。");
     } finally {
@@ -136,8 +140,9 @@ export function RegisterPage() {
     setSubmitting(true);
     setError("");
     try {
-      await registerAccount({ username, password, name, role, grade, level });
-      window.location.href = "/account";
+      const account = await registerAccount({ username, password, name, role, grade, level });
+      window.location.href =
+        account.user.role === "student" ? "/diagnostic" : "/account";
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "注册失败。");
     } finally {
@@ -404,6 +409,27 @@ export function AccountPage() {
       </section>
 
       {account.user.role === "student" ? (
+        <>
+        <section className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:mt-5 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold">当前学习起点</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {account.learningState?.diagnosticStatus === "completed"
+                  ? `词频前 ${account.learningState.frequencyFrontier} 词 · 题目难度 ${account.learningState.questionLevel} 级`
+                  : "完成首次诊断后，系统会确定适合你的学习起点。"}
+              </p>
+            </div>
+            {account.learningState?.diagnosticStatus !== "completed" ? (
+              <a
+                href="/diagnostic"
+                className="w-full rounded-md bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground sm:w-auto sm:py-2"
+              >
+                开始诊断
+              </a>
+            ) : null}
+          </div>
+        </section>
         <section className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:mt-5 sm:p-5">
           <h2 className="text-xl font-bold">学生关联</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -491,6 +517,7 @@ export function AccountPage() {
             </div>
           </div>
         </section>
+        </>
       ) : null}
 
       {account.user.role === "parent" ? (

@@ -133,6 +133,16 @@ function childToStudent(child: NonNullable<AccountPayload["children"]>[number]) 
   };
 }
 
+function reviewTimeLabel(value?: string) {
+  if (!value) return "现在可以复习";
+  const date = new Date(value);
+  if (date.getTime() <= Date.now()) return "现在可以复习";
+  return `${new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+  }).format(date)} 后复习`;
+}
+
 export function LearningApp({
   initialModule = "daily",
   autoStartPractice = null,
@@ -176,6 +186,7 @@ export function LearningApp({
   const autoStartedRef = useRef(false);
   const practiceProfileRefreshRef = useRef(false);
   const currentRole = account?.user.role;
+  const dueMistakeCount = mistakes.filter((mistake) => mistake.isDue).length;
   const visibleModules = useMemo(
     () => modules.filter((module) => module.roles.includes(currentRole as ModuleRole)),
     [currentRole],
@@ -225,6 +236,10 @@ export function LearningApp({
         if (currentAccount.user.role === "student") {
           if (!currentAccount.student) {
             setApiError("学生档案不完整，请重新登录或检查账号。");
+            return;
+          }
+          if (currentAccount.learningState?.diagnosticStatus !== "completed") {
+            window.location.href = "/diagnostic";
             return;
           }
 
@@ -505,7 +520,7 @@ export function LearningApp({
 
     try {
       const response = await api<{ mistakes: Mistake[] }>(
-        `/api/students/${student.id}/mistakes`,
+        `/api/students/${student.id}/mistakes?due=1`,
       );
       const queue = response.mistakes
         .map((mistake) => mistake.question)
@@ -926,9 +941,11 @@ export function LearningApp({
                       />
                     </div>
                     <p className="mt-3 text-sm text-muted-foreground">
-                      {task.mistakeCount > 0
-                        ? `待复习错题 ${task.mistakeCount} 道`
-                        : "暂无待复习错题"}
+                      {task.purpose === "review"
+                        ? task.mistakeCount > 0
+                          ? `今天到期 ${task.mistakeCount} 道`
+                          : "今天没有到期内容，名额已转为新学"
+                        : task.detail}
                     </p>
                   </article>
                 ))}
@@ -994,7 +1011,7 @@ export function LearningApp({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-teal-700">
-                    待复习 {mistakes.length} 道
+                    今天到期 {dueMistakeCount} 道 · 计划中 {mistakes.length} 道
                   </p>
                   <h2 className="mt-1 text-2xl font-bold tracking-tight">
                     错题本
@@ -1003,10 +1020,10 @@ export function LearningApp({
                 <button
                   type="button"
                   onClick={startMistakePractice}
-                  disabled={mistakes.length === 0 || dailyLoading}
+                  disabled={dueMistakeCount === 0 || dailyLoading}
                   className="w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:py-2"
                 >
-                  {dailyLoading ? "准备中" : "开始错题专项训练"}
+                  {dailyLoading ? "准备中" : "复习今天到期的错题"}
                 </button>
               </div>
               {mistakes.length === 0 ? (
@@ -1028,7 +1045,7 @@ export function LearningApp({
                         {item.knowledgePoint}
                       </p>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        复习进度：连续答对 {item.correctReviewStreak}/2 次后移出错题本
+                        复习阶段：{item.reviewStage}/4 · {reviewTimeLabel(item.nextReviewAt)}
                         {item.reviewCount > 0 ? ` · 已复习 ${item.reviewCount} 次` : ""}
                       </p>
                       <p className="mt-2 text-sm text-coral-strong">
