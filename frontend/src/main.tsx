@@ -24,6 +24,10 @@ function AppRoute() {
       return <AccountPage />;
     case "/vocabulary":
       return <LearningApp initialModule="words" />;
+    case "/grammar":
+      return <LearningApp initialModule="grammar" />;
+    case "/reading":
+      return <LearningApp initialModule="reading" />;
     case "/mistakes":
       return <LearningApp initialModule="mistakes" />;
     case "/parent":

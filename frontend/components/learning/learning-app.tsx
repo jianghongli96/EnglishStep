@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 
 import { PracticePage } from "@/components/learning/practice-page";
 import { WordAudioButton } from "@/components/learning/word-audio-button";
@@ -42,14 +43,14 @@ const modules = [
     id: "grammar",
     name: "语法基础",
     detail: "先理解，再做题巩固",
-    href: "/practice/grammar",
+    href: "/grammar",
     roles: ["student"],
   },
   {
     id: "reading",
     name: "分级阅读",
     detail: "短文 + 生词 + 题目解析",
-    href: "/practice/reading",
+    href: "/reading",
     roles: ["student"],
   },
   {
@@ -98,6 +99,26 @@ type ModuleRole = (typeof modules)[number]["roles"][number];
 function canRoleViewModule(role: string | undefined, moduleId: ModuleId) {
   const module = modules.find((item) => item.id === moduleId);
   return Boolean(role && module?.roles.includes(role as ModuleRole));
+}
+
+function moduleFromPath(pathname: string): ModuleId | null {
+  const normalizedPath =
+    pathname.length > 1 && pathname.endsWith("/")
+      ? pathname.slice(0, -1)
+      : pathname;
+  const navModule = modules.find((item) => item.href === normalizedPath);
+  return navModule?.id || null;
+}
+
+function shouldUseBrowserNavigation(event: MouseEvent<HTMLAnchorElement>) {
+  return (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.shiftKey
+  );
 }
 
 function childToStudent(child: NonNullable<AccountPayload["children"]>[number]) {
@@ -242,6 +263,19 @@ export function LearningApp({
   }, [initialModule]);
 
   useEffect(() => {
+    function syncModuleFromHistory() {
+      const nextModule = moduleFromPath(window.location.pathname);
+      if (!nextModule) return;
+
+      setPracticeKind(null);
+      setActiveModule(nextModule);
+    }
+
+    window.addEventListener("popstate", syncModuleFromHistory);
+    return () => window.removeEventListener("popstate", syncModuleFromHistory);
+  }, []);
+
+  useEffect(() => {
     if (
       !student ||
       !canViewActiveModule ||
@@ -361,6 +395,21 @@ export function LearningApp({
     practiceProfileRefreshRef.current = false;
     setDailyLoading(true);
     setApiError("");
+  }
+
+  function navigateToModule(
+    event: MouseEvent<HTMLAnchorElement>,
+    navModule: (typeof modules)[number],
+  ) {
+    if (shouldUseBrowserNavigation(event)) return;
+
+    event.preventDefault();
+    setPracticeKind(null);
+    setActiveModule(navModule.id);
+
+    if (window.location.pathname !== navModule.href) {
+      window.history.pushState({}, "", navModule.href);
+    }
   }
 
   async function answerQuestion(question: PracticeItem, option: string) {
@@ -631,6 +680,7 @@ export function LearningApp({
                 <a
                   key={module.id}
                   href={module.href}
+                  onClick={(event) => navigateToModule(event, module)}
                   className={`rounded-md border px-4 py-3 text-left transition ${
                     activeModule === module.id
                       ? "border-primary bg-primary text-primary-foreground shadow-sm"
