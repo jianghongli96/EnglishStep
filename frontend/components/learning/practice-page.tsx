@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { WordAudioButton } from "@/components/learning/word-audio-button";
 import { getQuestionSpeakWord, getSpeakableEnglishText } from "@/lib/speech";
 import type { Feedback, PracticeItem } from "@/lib/types";
@@ -275,6 +277,242 @@ export function PracticePage({
             </article>
           </div>
         )}
+      </section>
+    </main>
+  );
+}
+
+export function SpellingPracticePage({
+  title,
+  completionLabel,
+  completionTitle,
+  wrongLabel,
+  questions,
+  currentIndex,
+  correctCount,
+  wrongCount,
+  onAnswer,
+  onExit,
+  onRestart,
+}: {
+  title: string;
+  completionLabel: string;
+  completionTitle: string;
+  wrongLabel: string;
+  questions: PracticeItem[];
+  currentIndex: number;
+  correctCount: number;
+  wrongCount: number;
+  onAnswer: (question: PracticeItem, answer: string) => Promise<Feedback | null>;
+  onExit: () => void;
+  onRestart: () => void;
+}) {
+  const question = questions[currentIndex];
+  const isComplete = currentIndex >= questions.length;
+  const totalAnswered = correctCount + wrongCount;
+  const encouragement = getCompletionEncouragement(correctCount, wrongCount);
+  const progress =
+    questions.length === 0
+      ? 100
+      : Math.round((Math.min(currentIndex, questions.length) / questions.length) * 100);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [typedAnswer, setTypedAnswer] = useState("");
+  const [wrongAttempts, setWrongAttempts] = useState(0);
+  const [correctAnswer, setCorrectAnswer] = useState("");
+  const [hasError, setHasError] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const phonetic = question?.vocabulary?.find(Boolean) || "";
+  const answerLength = Math.max(1, Number(question?.answerLength || 0));
+
+  useEffect(() => {
+    setTypedAnswer("");
+    setWrongAttempts(0);
+    setCorrectAnswer("");
+    setHasError(false);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, [question?.id]);
+
+  async function submitAnswer() {
+    if (!question || submitting || !typedAnswer.trim()) return;
+
+    setSubmitting(true);
+    const result = await onAnswer(question, typedAnswer);
+    setSubmitting(false);
+
+    if (!result) return;
+    if (result.correct) return;
+
+    const nextWrongAttempts = wrongAttempts + 1;
+    setWrongAttempts(nextWrongAttempts);
+    setCorrectAnswer(result.correctAnswer);
+    setHasError(true);
+  }
+
+  if (isComplete) {
+    return (
+      <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 sm:py-5">
+        <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-3xl flex-col justify-center sm:min-h-[calc(100vh-40px)]">
+          <section className="w-full rounded-lg border border-border bg-card p-4 text-center shadow-sm sm:p-6">
+            <p className="text-sm font-semibold text-teal-700">{completionLabel}</p>
+            <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
+              {completionTitle}
+            </h1>
+            <div className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-4 text-left">
+              <p className="text-base font-black text-teal-800">
+                {encouragement.title}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-teal-900">
+                {encouragement.message}
+              </p>
+              <p className="mt-3 text-sm font-semibold leading-6 text-teal-800">
+                {encouragement.suggestion}
+              </p>
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border border-border bg-background p-4">
+                <p className="text-sm text-muted-foreground">完成题数</p>
+                <p className="mt-2 text-3xl font-black">{totalAnswered}</p>
+              </div>
+              <div className="rounded-md border border-border bg-background p-4">
+                <p className="text-sm text-muted-foreground">答对</p>
+                <p className="mt-2 text-3xl font-black text-teal-700">
+                  {correctCount}
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-background p-4 sm:col-span-2">
+                <p className="text-sm text-muted-foreground">{wrongLabel}</p>
+                <p className="mt-2 text-3xl font-black text-coral-strong">
+                  {wrongCount}
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap sm:justify-center">
+              <button
+                type="button"
+                onClick={onRestart}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              >
+                再来一轮
+              </button>
+              <button
+                type="button"
+                onClick={onExit}
+                className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold"
+              >
+                回到首页
+              </button>
+            </div>
+          </section>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 sm:py-5">
+      <section className="mx-auto flex min-h-[calc(100vh-32px)] max-w-3xl flex-col sm:min-h-[calc(100vh-40px)]">
+        <header className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onExit}
+            className="rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50"
+          >
+            返回
+          </button>
+          <div className="min-w-0 flex-1 px-2">
+            <div className="h-2 rounded-full bg-muted">
+              <span
+                className="block h-full rounded-full bg-teal-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+          <span className="whitespace-nowrap text-sm font-semibold text-muted-foreground">
+            {Math.min(currentIndex + 1, questions.length)}/{questions.length}
+          </span>
+        </header>
+
+        <div className="flex flex-1 items-center justify-center py-5 sm:py-8">
+          <article className="w-full rounded-lg border border-border bg-card p-4 shadow-sm sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-md bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground">
+                {title}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                错误 {wrongAttempts}/3
+              </span>
+            </div>
+
+            <p className="mt-5 text-sm font-semibold text-teal-700">中文意思</p>
+            <h1 className="mt-2 break-words text-2xl font-black leading-tight tracking-tight sm:text-3xl">
+              {question.prompt.replace(/^根据中文意思拼写单词：/, "")}
+            </h1>
+            {phonetic ? (
+              <p className="mt-3 text-base font-semibold text-muted-foreground">
+                音标：{phonetic}
+              </p>
+            ) : null}
+            <form
+              className="mt-7"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitAnswer();
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => inputRef.current?.focus()}
+                className="grid w-full grid-flow-col justify-center gap-2 overflow-x-auto rounded-md bg-background p-4"
+                aria-label="拼写输入框"
+              >
+                {Array.from({ length: answerLength }).map((_, index) => (
+                  <span
+                    key={`${question.id}-${index}`}
+                    className={`flex h-12 w-9 items-center justify-center border-b-2 text-xl font-black uppercase sm:w-11 ${
+                      hasError
+                        ? "border-coral text-coral-strong"
+                        : "border-foreground text-foreground"
+                    }`}
+                  >
+                    {typedAnswer[index] || ""}
+                  </span>
+                ))}
+              </button>
+              <input
+                ref={inputRef}
+                value={typedAnswer}
+                onChange={(event) => {
+                  setTypedAnswer(event.target.value.trim().toLowerCase());
+                  setHasError(false);
+                }}
+                autoCapitalize="none"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className="mt-4 w-full rounded-md border border-border bg-background px-3 py-3 text-center text-lg font-bold tracking-[0.25em] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                placeholder="输入英文单词"
+              />
+              <button
+                type="submit"
+                disabled={submitting || !typedAnswer.trim()}
+                className="mt-4 w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submitting ? "检查中" : "检查拼写"}
+              </button>
+            </form>
+
+            {hasError ? (
+              <section className="mt-5 rounded-md bg-coral-soft p-4 text-sm leading-6 text-coral-strong">
+                <p className="font-bold">拼写不正确，请再试一次。</p>
+                {wrongAttempts >= 3 && correctAnswer ? (
+                  <p className="mt-2">
+                    正确单词：<span className="font-black">{correctAnswer}</span>
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
+          </article>
+        </div>
       </section>
     </main>
   );

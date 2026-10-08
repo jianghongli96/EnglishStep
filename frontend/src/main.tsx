@@ -38,6 +38,8 @@ function AppRoute() {
       return <LearningApp initialModule="daily" autoStartPractice="daily" />;
     case "/practice/words":
       return <LearningApp initialModule="words" autoStartPractice="words" />;
+    case "/practice/spelling":
+      return <LearningApp initialModule="words" autoStartPractice="spelling" />;
     case "/practice/grammar":
       return <LearningApp initialModule="grammar" autoStartPractice="grammar" />;
     case "/practice/reading":

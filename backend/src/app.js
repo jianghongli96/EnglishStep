@@ -1100,6 +1100,41 @@ function recommendQuestions(studentId, module, limit = 5) {
   );
 }
 
+function recommendSpellingQuestions(studentId, limit = 10) {
+  ensureSpellingQuestions();
+  const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  return db
+    .prepare(
+      `
+      SELECT q.*,
+        CASE
+          WHEN m.id IS NOT NULL THEN 0
+          WHEN a.question_id IS NULL THEN 1
+          WHEN a.last_attempt_at < ? THEN 2
+          ELSE 3
+        END AS priority
+      FROM questions q
+      LEFT JOIN mistakes m
+        ON m.question_id = q.id
+        AND m.student_id = ?
+        AND m.resolved_at IS NULL
+      LEFT JOIN (
+        SELECT question_id, MAX(created_at) AS last_attempt_at
+        FROM attempts
+        WHERE student_id = ?
+        GROUP BY question_id
+      ) a ON a.question_id = q.id
+      WHERE q.status = 'published'
+        AND q.module = 'words'
+        AND q.type = 'spelling'
+      ORDER BY priority ASC, q.difficulty ASC, RANDOM()
+      LIMIT ?
+    `,
+    )
+    .all(recentCutoff, studentId, studentId, limit)
+    .map((row) => publicQuestion(rowToQuestion(row, false)));
+}
+
 function selectRecommendedQuestionRows(studentId, module, limit = 5) {
   const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   return db
@@ -1367,6 +1402,17 @@ async function handleLinkParent(req, res) {
     return;
   }
 
+  const existingLink = db
+    .prepare(
+      `SELECT id FROM parent_student_links
+       WHERE parent_user_id = ? AND student_user_id = ? AND status = 'active'`,
+    )
+    .get(parent.id, student.id);
+  if (existingLink) {
+    badRequest(res, "已绑定该家长");
+    return;
+  }
+
   db.prepare(
     `INSERT OR IGNORE INTO parent_student_links (
       id, parent_user_id, student_user_id, status, created_at
@@ -1443,6 +1489,17 @@ async function handleJoinTeacherGroup(req, res) {
     .get(shareCode);
   if (!group) {
     badRequest(res, "shareCode is invalid");
+    return;
+  }
+
+  const existingMember = db
+    .prepare(
+      `SELECT id FROM group_members
+       WHERE group_id = ? AND student_user_id = ? AND status = 'active'`,
+    )
+    .get(group.id, student.id);
+  if (existingMember) {
+    badRequest(res, "已加入该分组");
     return;
   }
 
@@ -1893,7 +1950,50 @@ function generateVocabularyQuestions(vocab, status) {
       explain: `根据句意和词义，这里应填 ${vocab.word}。`,
       difficulty: Math.max(2, vocab.difficulty + 1),
     }),
+    spellingQuestionForVocabulary(vocab, status),
   ];
+}
+
+function spellingQuestionForVocabulary(vocab, status = "published") {
+  return normalizeQuestion({
+    module: "words",
+    grade: vocab.grade,
+    knowledgePoint: vocab.word,
+    vocabularyId: vocab.id,
+    sourceBook: vocab.sourceBook,
+    sourceUnit: vocab.sourceUnit,
+    sourceType: "rule-generated",
+    status,
+    createdAt: new Date().toISOString(),
+    id: `q-${vocab.id}-spelling`,
+    type: "spelling",
+    title: "拼写练习",
+    vocabulary: [vocab.phonetic || ""],
+    prompt: `根据中文意思拼写单词：${vocab.meaning}`,
+    options: [],
+    answer: vocab.word,
+    explain: `“${vocab.meaning}”对应的英文是 ${vocab.word}。`,
+    difficulty: Math.max(1, Number(vocab.difficulty || 1)),
+  });
+}
+
+function ensureSpellingQuestions() {
+  const rows = db
+    .prepare(
+      `SELECT v.*
+       FROM vocabulary v
+       LEFT JOIN questions q ON q.id = 'q-' || v.id || '-spelling'
+       WHERE q.id IS NULL
+       LIMIT 500`,
+    )
+    .all();
+
+  for (const row of rows) {
+    const vocab = rowToVocabulary(row);
+    if (vocab) {
+      insertQuestion(spellingQuestionForVocabulary(vocab, "published"));
+    }
+  }
 }
 
 function meaningDistractors(vocab) {
@@ -2142,6 +2242,22 @@ async function route(req, res) {
         tasks: buildDailyTasks(studentId),
       },
     });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/spelling-questions") {
+    const studentId = url.searchParams.get("studentId") || "";
+    const limit = Number(url.searchParams.get("limit") || 10);
+    if (!canAccessStudent(authUser, studentId)) {
+      forbidden(res);
+      return;
+    }
+    if (!findStudent(studentId)) {
+      badRequest(res, "studentId is invalid");
+      return;
+    }
+
+    send(res, 200, { questions: recommendSpellingQuestions(studentId, limit) });
     return;
   }
 

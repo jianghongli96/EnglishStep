@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 
-import { PracticePage } from "@/components/learning/practice-page";
+import {
+  PracticePage,
+  SpellingPracticePage,
+} from "@/components/learning/practice-page";
 import { WordAudioButton } from "@/components/learning/word-audio-button";
 import { loadCurrentAccount } from "@/lib/account";
 import { api } from "@/lib/api";
@@ -333,6 +336,10 @@ export function LearningApp({
       void startMistakePractice();
       return;
     }
+    if (autoStartPractice === "spelling") {
+      void startSpellingPractice();
+      return;
+    }
     void startModulePractice(autoStartPractice);
   }, [autoStartPractice, canViewActiveModule, student]);
 
@@ -521,6 +528,25 @@ export function LearningApp({
     }
   }
 
+  async function startSpellingPractice() {
+    if (!student) return;
+
+    preparePracticeStart();
+
+    try {
+      const response = await api<{ questions: PracticeItem[] }>(
+        `/api/spelling-questions?studentId=${student.id}&limit=10`,
+      );
+
+      setDailyQueue(shuffleQuestions(response.questions));
+      setPracticeKind("spelling");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "拼写练习加载失败。");
+    } finally {
+      setDailyLoading(false);
+    }
+  }
+
   async function answerDailyQuestion(question: PracticeItem, option: string) {
     if (!student || dailyFeedback || dailySelected) return;
 
@@ -552,6 +578,41 @@ export function LearningApp({
       }
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "答题提交失败。");
+    }
+  }
+
+  async function answerSpellingQuestion(question: PracticeItem, answer: string) {
+    if (!student) return null;
+
+    try {
+      const response = await api<{
+        result: Feedback;
+        progress: ProgressItem[];
+        mistakes: Mistake[];
+      }>("/api/attempts", {
+        method: "POST",
+        body: JSON.stringify({
+          studentId: student.id,
+          questionId: question.id,
+          answer,
+        }),
+      });
+
+      setProgress(response.progress);
+      setMistakes(response.mistakes);
+
+      if (response.result.correct) {
+        setDailyCorrect((count) => count + 1);
+        goToNextDailyQuestion();
+      } else {
+        setDailyWrong((count) => count + 1);
+        setDailyFeedback(response.result);
+      }
+
+      return response.result;
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "答题提交失败。");
+      return null;
     }
   }
 
@@ -602,6 +663,24 @@ export function LearningApp({
 
   if (practiceKind) {
     const practiceCopy = getPracticeCopy(practiceKind);
+    if (practiceKind === "spelling") {
+      return (
+        <SpellingPracticePage
+          title={practiceCopy.title}
+          completionLabel={practiceCopy.completionLabel}
+          completionTitle={practiceCopy.completionTitle}
+          wrongLabel={practiceCopy.wrongLabel}
+          questions={dailyQueue}
+          currentIndex={dailyIndex}
+          correctCount={dailyCorrect}
+          wrongCount={dailyWrong}
+          onAnswer={answerSpellingQuestion}
+          onExit={exitDailyPractice}
+          onRestart={startSpellingPractice}
+        />
+      );
+    }
+
     return (
       <PracticePage
         title={practiceCopy.title}
@@ -855,11 +934,16 @@ export function LearningApp({
                 }
                 loading={dailyLoading}
                 onStart={() => startModulePractice(activeModule)}
+                onStartSpelling={
+                  activeModule === "words" ? startSpellingPractice : undefined
+                }
               />
               {activeModule === "words" ? (
                 <VocabularyStudyPanel
                   vocabulary={studyVocabulary}
                   onReload={() => student && loadStudyVocabulary(student.id)}
+                  onStartSpelling={startSpellingPractice}
+                  loading={dailyLoading}
                 />
               ) : null}
             </>
@@ -1056,6 +1140,12 @@ function getPracticeCopy(kind: PracticeKind) {
       completionTitle: "这一轮词汇训练结束了",
       wrongLabel: "错词",
     },
+    spelling: {
+      title: "拼写练习",
+      completionLabel: "拼写练习完成",
+      completionTitle: "这一轮拼写训练结束了",
+      wrongLabel: "拼错",
+    },
     grammar: {
       title: "语法专项训练",
       completionLabel: "语法练习完成",
@@ -1076,9 +1166,13 @@ function getPracticeCopy(kind: PracticeKind) {
 function VocabularyStudyPanel({
   vocabulary,
   onReload,
+  onStartSpelling,
+  loading,
 }: {
   vocabulary: VocabularyItem[];
   onReload: () => void;
+  onStartSpelling: () => void;
+  loading: boolean;
 }) {
   const [searchWord, setSearchWord] = useState("");
   const [searchResults, setSearchResults] = useState<VocabularyItem[]>([]);
@@ -1117,13 +1211,23 @@ function VocabularyStudyPanel({
           <p className="text-sm font-semibold text-teal-700">先学再练</p>
           <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">词汇学习卡</h2>
         </div>
-        <button
-          type="button"
-          onClick={onReload}
-          className="min-h-10 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50 sm:w-auto"
-        >
-          换一批词
-        </button>
+        <div className="grid gap-2 sm:flex">
+          <button
+            type="button"
+            onClick={onStartSpelling}
+            disabled={loading}
+            className="min-h-10 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "准备中" : "开启拼写练习"}
+          </button>
+          <button
+            type="button"
+            onClick={onReload}
+            className="min-h-10 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50 sm:w-auto"
+          >
+            换一批词
+          </button>
+        </div>
       </div>
 
       <form
@@ -1384,6 +1488,7 @@ function ModuleOverview({
   mistakeCount,
   loading,
   onStart,
+  onStartSpelling,
 }: {
   module: "words" | "grammar" | "reading";
   mastery: number;
@@ -1392,6 +1497,7 @@ function ModuleOverview({
   mistakeCount: number;
   loading: boolean;
   onStart: () => void;
+  onStartSpelling?: () => void;
 }) {
   const title = {
     words: "词汇练习",
@@ -1421,14 +1527,26 @@ function ModuleOverview({
             {description}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onStart}
-          disabled={loading}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? "准备中" : buttonText}
-        </button>
+        <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col">
+          {onStartSpelling ? (
+            <button
+              type="button"
+              onClick={onStartSpelling}
+              disabled={loading}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? "准备中" : "开启拼写练习"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onStart}
+            disabled={loading}
+            className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold shadow-sm transition hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "准备中" : buttonText}
+          </button>
+        </div>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">

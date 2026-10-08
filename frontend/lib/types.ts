@@ -33,6 +33,7 @@ export type PracticeItem = {
   prompt: string;
   options: string[];
   explain: string;
+  answerLength?: number;
   grade?: string;
   difficulty?: number;
   knowledgePoint?: string;
@@ -88,7 +89,13 @@ export type Feedback = {
   explain: string;
 };
 
-export type PracticeKind = "daily" | "mistakes" | "words" | "grammar" | "reading";
+export type PracticeKind =
+  | "daily"
+  | "mistakes"
+  | "words"
+  | "grammar"
+  | "reading"
+  | "spelling";
 
 export type StudyDay = {
   date: string;

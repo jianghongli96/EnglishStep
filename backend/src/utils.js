@@ -9,6 +9,9 @@ export function parseJson(value, fallback) {
 export function publicQuestion(question) {
   if (!question) return null;
   const { answer, ...safeQuestion } = question;
+  if (question.type === "spelling") {
+    safeQuestion.answerLength = normalizeText(answer).length;
+  }
   return safeQuestion;
 }
 
