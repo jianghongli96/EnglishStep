@@ -125,6 +125,39 @@ export function initSchema(db) {
       FOREIGN KEY(student_id) REFERENCES students(id)
     );
 
+    CREATE TABLE IF NOT EXISTS practice_sessions (
+      id TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL,
+      mode TEXT NOT NULL CHECK(mode IN (
+        'daily', 'extra', 'mistakes', 'words', 'grammar', 'reading', 'spelling'
+      )),
+      session_date TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('active', 'completed')),
+      target_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      completed_at TEXT,
+      FOREIGN KEY(student_id) REFERENCES students(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS session_questions (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      sort_order INTEGER NOT NULL,
+      answered_at TEXT,
+      correct INTEGER,
+      FOREIGN KEY(session_id) REFERENCES practice_sessions(id),
+      FOREIGN KEY(question_id) REFERENCES questions(id),
+      UNIQUE(session_id, question_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_practice_sessions_student_date
+      ON practice_sessions(student_id, session_date, mode, status);
+
+    CREATE INDEX IF NOT EXISTS idx_session_questions_session_order
+      ON session_questions(session_id, sort_order);
+
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,

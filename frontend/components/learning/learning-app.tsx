@@ -170,6 +170,7 @@ export function LearningApp({
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyCorrect, setDailyCorrect] = useState(0);
   const [dailyWrong, setDailyWrong] = useState(0);
+  const [dailySessionId, setDailySessionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
   const autoStartedRef = useRef(false);
@@ -405,6 +406,7 @@ export function LearningApp({
     setDailySelected("");
     setDailyCorrect(0);
     setDailyWrong(0);
+    setDailySessionId("");
     practiceProfileRefreshRef.current = false;
     setDailyLoading(true);
     setApiError("");
@@ -469,19 +471,25 @@ export function LearningApp({
     await loadQuestions(student.id, module);
   }
 
-  async function startDailyPractice() {
+  async function startDailyPractice(mode: "resume" | "extra" = "resume") {
     if (!student) return;
 
     preparePracticeStart();
 
     try {
       const response = await api<{ plan: DailyPlan }>(
-        `/api/daily-plan?studentId=${student.id}`,
+        `/api/daily-plan?studentId=${student.id}${
+          mode === "extra" ? "&mode=extra" : ""
+        }`,
       );
       const queue = response.plan.questions;
 
       setDailyQueue(queue);
       setDailyTasks(response.plan.tasks);
+      setDailySessionId(response.plan.sessionId);
+      setDailyIndex(response.plan.currentIndex);
+      setDailyCorrect(response.plan.correctCount);
+      setDailyWrong(response.plan.wrongCount);
       setPracticeKind("daily");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "今日任务加载失败。");
@@ -584,6 +592,7 @@ export function LearningApp({
           studentId: student.id,
           questionId: question.id,
           answer: option,
+          sessionId: practiceKind === "daily" ? dailySessionId : undefined,
         }),
       });
 
@@ -651,6 +660,7 @@ export function LearningApp({
     setPracticeKind(null);
     setDailyFeedback(null);
     setDailySelected("");
+    setDailySessionId("");
     refreshProfileAfterPractice();
   }
 
@@ -721,7 +731,7 @@ export function LearningApp({
           practiceKind === "mistakes"
             ? startMistakePractice
             : practiceKind === "daily"
-              ? startDailyPractice
+              ? () => startDailyPractice("extra")
               : () => startModulePractice(practiceKind)
         }
       />
@@ -755,7 +765,7 @@ export function LearningApp({
             {/* {currentRole === "student" ? (
               <button
                 type="button"
-                onClick={startDailyPractice}
+                onClick={() => void startDailyPractice()}
                 disabled={!student || dailyLoading}
                 className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -925,7 +935,7 @@ export function LearningApp({
               </div>
               <button
                 type="button"
-                onClick={startDailyPractice}
+                onClick={() => void startDailyPractice()}
                 disabled={!student || dailyLoading}
                 className="mt-5 w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
               >

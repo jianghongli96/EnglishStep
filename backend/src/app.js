@@ -1045,7 +1045,57 @@ function buildParentReport(studentId) {
 }
 
 function buildDailyTasks(studentId) {
-  const plan = getOrCreateDailyPlan(studentId);
+  const session = db
+    .prepare(
+      `SELECT * FROM practice_sessions
+       WHERE student_id = ? AND session_date = ? AND mode = 'daily'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    )
+    .get(studentId, getTodayKey());
+
+  if (session) {
+    const completedByModule = new Map(
+      db
+        .prepare(
+          `SELECT q.module, COUNT(*) AS total
+           FROM session_questions sq
+           JOIN questions q ON q.id = sq.question_id
+           WHERE sq.session_id = ? AND sq.answered_at IS NOT NULL
+           GROUP BY q.module`,
+        )
+        .all(session.id)
+        .map((row) => [row.module, Number(row.total || 0)]),
+    );
+    const mistakes = db
+      .prepare(
+        `SELECT module, COUNT(*) AS total FROM mistakes
+         WHERE student_id = ? AND resolved_at IS NULL
+         GROUP BY module`,
+      )
+      .all(studentId);
+    const mistakeCount = new Map(
+      mistakes.map((row) => [row.module, Number(row.total || 0)]),
+    );
+
+    return dailyTaskPlan.map((task) => {
+      const completed = completedByModule.get(task.module) || 0;
+      return {
+        ...task,
+        completed,
+        progress: Math.min(100, Math.round((completed / task.target) * 100)),
+        mistakeCount: mistakeCount.get(task.module) || 0,
+      };
+    });
+  }
+
+  const legacyPlanRow = db
+    .prepare(
+      `SELECT * FROM daily_plans
+       WHERE student_id = ? AND plan_date = ?`,
+    )
+    .get(studentId, getTodayKey());
+  const plan = legacyPlanRow ? rowToDailyPlan(legacyPlanRow) : null;
   if (!plan) {
     return dailyTaskPlan.map((task) => ({
       ...task,
@@ -1109,60 +1159,165 @@ function getTodayKey() {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-function getOrCreateDailyPlan(studentId, planDate = getTodayKey()) {
+function getPracticeSession(sessionId) {
+  return db
+    .prepare("SELECT * FROM practice_sessions WHERE id = ?")
+    .get(sessionId);
+}
+
+function getPracticeSessionQuestionRows(sessionId) {
+  return db
+    .prepare(
+      `SELECT q.*, sq.answered_at AS session_answered_at,
+              sq.correct AS session_correct, sq.sort_order AS session_sort_order
+       FROM session_questions sq
+       JOIN questions q ON q.id = sq.question_id
+       WHERE sq.session_id = ?
+       ORDER BY sq.sort_order ASC`,
+    )
+    .all(sessionId);
+}
+
+function practiceSessionPayload(session) {
+  const rows = getPracticeSessionQuestionRows(session.id);
+  const currentIndex = rows.findIndex((row) => !row.session_answered_at);
+  const correctCount = rows.filter(
+    (row) => row.session_answered_at && Number(row.session_correct) === 1,
+  ).length;
+  const wrongCount = rows.filter(
+    (row) => row.session_answered_at && Number(row.session_correct) === 0,
+  ).length;
+
+  return {
+    id: session.id,
+    sessionId: session.id,
+    mode: session.mode,
+    date: session.session_date,
+    status: session.status,
+    createdAt: session.created_at,
+    completedAt: session.completed_at,
+    currentIndex: currentIndex === -1 ? rows.length : currentIndex,
+    correctCount,
+    wrongCount,
+    questions: rows.map((row) => publicQuestion(rowToQuestion(row, false))),
+    tasks: buildDailyTasks(session.student_id),
+  };
+}
+
+function getOrCreateDailyPracticeSession(studentId, requestedMode = "resume") {
   const student = findStudent(studentId);
   if (!student) return null;
 
-  const existing = db
+  const sessionDate = getTodayKey();
+  const activeSession = db
     .prepare(
-      `SELECT * FROM daily_plans
-       WHERE student_id = ? AND plan_date = ?`,
+      `SELECT * FROM practice_sessions
+       WHERE student_id = ? AND session_date = ? AND status = 'active'
+         AND mode IN ('daily', 'extra')
+       ORDER BY created_at DESC
+       LIMIT 1`,
     )
-    .get(studentId, planDate);
+    .get(studentId, sessionDate);
 
-  if (existing) {
-    return rowToDailyPlan(existing);
+  if (activeSession) {
+    return practiceSessionPayload(activeSession);
   }
 
-  const now = new Date().toISOString();
-  const questionIds = [];
-
-  for (const task of dailyTaskPlan) {
-    const rows = selectRecommendedQuestionRows(studentId, task.module, task.target);
-    for (const row of rows) {
-      if (!questionIds.includes(row.id)) {
-        questionIds.push(row.id);
-      }
+  if (requestedMode !== "extra") {
+    const completedDailySession = db
+      .prepare(
+        `SELECT * FROM practice_sessions
+         WHERE student_id = ? AND session_date = ?
+           AND mode = 'daily' AND status = 'completed'
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      )
+      .get(studentId, sessionDate);
+    if (completedDailySession) {
+      return practiceSessionPayload(completedDailySession);
     }
   }
 
-  const shuffledIds = shuffleArray(questionIds);
-  const plan = {
+  const excludedQuestionIds = db
+    .prepare(
+      `SELECT DISTINCT sq.question_id
+       FROM session_questions sq
+       JOIN practice_sessions ps ON ps.id = sq.session_id
+       WHERE ps.student_id = ? AND ps.session_date = ?`,
+    )
+    .all(studentId, sessionDate)
+    .map((row) => row.question_id);
+  const selectedQuestionIds = [];
+
+  for (const task of dailyTaskPlan) {
+    const excluded = [...excludedQuestionIds, ...selectedQuestionIds];
+    const freshRows = selectRecommendedQuestionRows(
+      studentId,
+      task.module,
+      task.target,
+      [],
+      excluded,
+    );
+    const rows = [...freshRows];
+
+    if (rows.length < task.target) {
+      const fallbackRows = selectRecommendedQuestionRows(
+        studentId,
+        task.module,
+        task.target * 2,
+      );
+      for (const row of fallbackRows) {
+        if (rows.length >= task.target) break;
+        if (!rows.some((current) => current.id === row.id)) rows.push(row);
+      }
+    }
+
+    for (const row of rows) {
+      if (!selectedQuestionIds.includes(row.id)) selectedQuestionIds.push(row.id);
+    }
+  }
+
+  const questionIds = shuffleArray(selectedQuestionIds);
+  const now = new Date().toISOString();
+  const session = {
     id: randomUUID(),
     studentId,
-    planDate,
-    questionIds: shuffledIds,
+    mode: requestedMode === "extra" ? "extra" : "daily",
+    sessionDate,
+    status: questionIds.length ? "active" : "completed",
+    targetCount: questionIds.length,
     createdAt: now,
+    completedAt: questionIds.length ? null : now,
   };
 
-  db.prepare(
-    `INSERT INTO daily_plans (
-      id, student_id, plan_date, question_ids_json, created_at
-    ) VALUES (?, ?, ?, ?, ?)`,
-  ).run(
-    plan.id,
-    plan.studentId,
-    plan.planDate,
-    JSON.stringify(plan.questionIds),
-    plan.createdAt,
-  );
+  withTransaction(() => {
+    db.prepare(
+      `INSERT INTO practice_sessions (
+        id, student_id, mode, session_date, status, target_count,
+        created_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      session.id,
+      session.studentId,
+      session.mode,
+      session.sessionDate,
+      session.status,
+      session.targetCount,
+      session.createdAt,
+      session.completedAt,
+    );
 
-  return {
-    ...plan,
-    questions: getQuestionsByIds(plan.questionIds).map((question) =>
-      publicQuestion(question),
-    ),
-  };
+    const insertQuestion = db.prepare(
+      `INSERT INTO session_questions (
+        id, session_id, question_id, sort_order, answered_at, correct
+      ) VALUES (?, ?, ?, ?, NULL, NULL)`,
+    );
+    questionIds.forEach((questionId, index) => {
+      insertQuestion.run(randomUUID(), session.id, questionId, index);
+    });
+  });
+
+  return practiceSessionPayload(getPracticeSession(session.id));
 }
 
 function rowToDailyPlan(row) {
@@ -1278,14 +1433,27 @@ function withSpellingPhonetic(question) {
   };
 }
 
-function selectRecommendedQuestionRows(studentId, module, limit = 5, vocabularyIds = []) {
+function selectRecommendedQuestionRows(
+  studentId,
+  module,
+  limit = 5,
+  vocabularyIds = [],
+  excludeQuestionIds = [],
+) {
   const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const filteredVocabularyIds = vocabularyIds
     .map((id) => normalizeText(id))
     .filter(Boolean)
     .slice(0, 50);
+  const filteredExcludeQuestionIds = excludeQuestionIds
+    .map((id) => normalizeText(id))
+    .filter(Boolean)
+    .slice(0, 500);
   const vocabularyFilter = filteredVocabularyIds.length
     ? `AND q.vocabulary_id IN (${filteredVocabularyIds.map(() => "?").join(",")})`
+    : "";
+  const excludeFilter = filteredExcludeQuestionIds.length
+    ? `AND q.id NOT IN (${filteredExcludeQuestionIds.map(() => "?").join(",")})`
     : "";
 
   return db
@@ -1313,6 +1481,7 @@ function selectRecommendedQuestionRows(studentId, module, limit = 5, vocabularyI
         AND (? IS NULL OR q.module = ?)
         AND q.type <> 'spelling'
         ${vocabularyFilter}
+        ${excludeFilter}
       ORDER BY priority ASC, q.difficulty ASC, RANDOM()
       LIMIT ?
     `,
@@ -1324,6 +1493,7 @@ function selectRecommendedQuestionRows(studentId, module, limit = 5, vocabularyI
       module || null,
       module || null,
       ...filteredVocabularyIds,
+      ...filteredExcludeQuestionIds,
       limit,
     );
 }
@@ -1734,6 +1904,7 @@ async function handleAttempt(req, res) {
   const body = await parseBody(req);
   const student = findStudent(body.studentId);
   const question = getQuestion(body.questionId);
+  const sessionId = normalizeText(body.sessionId || "");
 
   if (!student) {
     badRequest(res, "studentId is invalid");
@@ -1747,6 +1918,22 @@ async function handleAttempt(req, res) {
 
   if (!canAccessStudent(getAuthUser(req), student.id)) {
     forbidden(res);
+    return;
+  }
+
+  const practiceSession = sessionId ? getPracticeSession(sessionId) : null;
+  if (
+    sessionId &&
+    (!practiceSession ||
+      practiceSession.student_id !== student.id ||
+      !db
+        .prepare(
+          `SELECT 1 FROM session_questions
+           WHERE session_id = ? AND question_id = ?`,
+        )
+        .get(sessionId, question.id))
+  ) {
+    badRequest(res, "sessionId does not contain this question");
     return;
   }
 
@@ -1832,7 +2019,34 @@ async function handleAttempt(req, res) {
     }
 
     updateStudentKnowledge(student.id, question.knowledgePoint, correct, now);
+
+    if (practiceSession?.status === "active") {
+      db.prepare(
+        `UPDATE session_questions
+         SET answered_at = COALESCE(answered_at, ?),
+             correct = COALESCE(correct, ?)
+         WHERE session_id = ? AND question_id = ?`,
+      ).run(now, correct ? 1 : 0, practiceSession.id, question.id);
+
+      const remaining = db
+        .prepare(
+          `SELECT COUNT(*) AS total FROM session_questions
+           WHERE session_id = ? AND answered_at IS NULL`,
+        )
+        .get(practiceSession.id);
+      if (Number(remaining.total || 0) === 0) {
+        db.prepare(
+          `UPDATE practice_sessions
+           SET status = 'completed', completed_at = ?
+           WHERE id = ?`,
+        ).run(now, practiceSession.id);
+      }
+    }
   });
+
+  const updatedSession = practiceSession
+    ? practiceSessionPayload(getPracticeSession(practiceSession.id))
+    : null;
 
   send(res, 201, {
     attempt,
@@ -1841,6 +2055,14 @@ async function handleAttempt(req, res) {
       correctAnswer: question.answer,
       explain: question.explain,
     },
+    session: updatedSession
+      ? {
+          id: updatedSession.id,
+          status: updatedSession.status,
+          currentIndex: updatedSession.currentIndex,
+          completedAt: updatedSession.completedAt,
+        }
+      : null,
     progress: buildProgress(student.id),
     mistakes: getStudentMistakes(student.id),
   });
@@ -2399,25 +2621,18 @@ async function route(req, res) {
 
   if (req.method === "GET" && url.pathname === "/api/daily-plan") {
     const studentId = url.searchParams.get("studentId") || "";
+    const mode = url.searchParams.get("mode") === "extra" ? "extra" : "resume";
     if (!canAccessStudent(authUser, studentId)) {
       forbidden(res);
       return;
     }
-    const plan = getOrCreateDailyPlan(studentId);
+    const plan = getOrCreateDailyPracticeSession(studentId, mode);
     if (!plan) {
       badRequest(res, "studentId is invalid");
       return;
     }
 
-    send(res, 200, {
-      plan: {
-        id: plan.id,
-        date: plan.planDate,
-        createdAt: plan.createdAt,
-        questions: plan.questions,
-        tasks: buildDailyTasks(studentId),
-      },
-    });
+    send(res, 200, { plan });
     return;
   }
 

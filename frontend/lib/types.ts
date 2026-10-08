@@ -17,8 +17,15 @@ export type DailyTask = {
 
 export type DailyPlan = {
   id: string;
+  sessionId: string;
+  mode: "daily" | "extra";
   date: string;
+  status: "active" | "completed";
   createdAt: string;
+  completedAt?: string | null;
+  currentIndex: number;
+  correctCount: number;
+  wrongCount: number;
   questions: PracticeItem[];
   tasks: DailyTask[];
 };
