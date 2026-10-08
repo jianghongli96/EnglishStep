@@ -1129,8 +1129,8 @@ function shuffleArray(items) {
   return copy;
 }
 
-function recommendQuestions(studentId, module, limit = 5) {
-  return selectRecommendedQuestionRows(studentId, module, limit).map((row) =>
+function recommendQuestions(studentId, module, limit = 5, vocabularyIds = []) {
+  return selectRecommendedQuestionRows(studentId, module, limit, vocabularyIds).map((row) =>
     publicQuestion(rowToQuestion(row, false)),
   );
 }
@@ -1189,8 +1189,16 @@ function withSpellingPhonetic(question) {
   };
 }
 
-function selectRecommendedQuestionRows(studentId, module, limit = 5) {
+function selectRecommendedQuestionRows(studentId, module, limit = 5, vocabularyIds = []) {
   const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const filteredVocabularyIds = vocabularyIds
+    .map((id) => normalizeText(id))
+    .filter(Boolean)
+    .slice(0, 50);
+  const vocabularyFilter = filteredVocabularyIds.length
+    ? `AND q.vocabulary_id IN (${filteredVocabularyIds.map(() => "?").join(",")})`
+    : "";
+
   return db
     .prepare(
       `
@@ -1215,11 +1223,20 @@ function selectRecommendedQuestionRows(studentId, module, limit = 5) {
       WHERE q.status = 'published'
         AND (? IS NULL OR q.module = ?)
         AND q.type <> 'spelling'
+        ${vocabularyFilter}
       ORDER BY priority ASC, q.difficulty ASC, RANDOM()
       LIMIT ?
     `,
     )
-    .all(recentCutoff, studentId, studentId, module || null, module || null, limit);
+    .all(
+      recentCutoff,
+      studentId,
+      studentId,
+      module || null,
+      module || null,
+      ...filteredVocabularyIds,
+      limit,
+    );
 }
 
 function listParentChildren(parentUserId) {
@@ -2258,11 +2275,17 @@ async function route(req, res) {
     const module = url.searchParams.get("module");
     const studentId = url.searchParams.get("studentId") || "";
     const limit = Number(url.searchParams.get("limit") || 5);
+    const vocabularyIds = (url.searchParams.get("vocabularyIds") || "")
+      .split(",")
+      .map((id) => normalizeText(id))
+      .filter(Boolean);
     if (!canAccessStudent(authUser, studentId)) {
       forbidden(res);
       return;
     }
-    send(res, 200, { questions: recommendQuestions(studentId, module, limit) });
+    send(res, 200, {
+      questions: recommendQuestions(studentId, module, limit, vocabularyIds),
+    });
     return;
   }
 

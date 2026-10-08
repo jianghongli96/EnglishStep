@@ -369,6 +369,7 @@ export function LearningApp({
       `/api/vocabulary/study?studentId=${studentId}&limit=12`,
     );
     setStudyVocabulary(response.vocabulary);
+    return response.vocabulary;
   }
 
   async function loadParentReport(studentId: string) {
@@ -523,8 +524,20 @@ export function LearningApp({
     const limit = module === "reading" ? 5 : 10;
 
     try {
+      const vocabularyForPractice =
+        module === "words"
+          ? studyVocabulary.length > 0
+            ? studyVocabulary
+            : await loadStudyVocabulary(student.id)
+          : [];
+      const vocabularyQuery =
+        module === "words" && vocabularyForPractice.length > 0
+          ? `&vocabularyIds=${encodeURIComponent(
+              vocabularyForPractice.map((item) => item.id).join(","),
+            )}`
+          : "";
       const response = await api<{ questions: PracticeItem[] }>(
-        `/api/questions?studentId=${student.id}&module=${module}&limit=${limit}`,
+        `/api/questions?studentId=${student.id}&module=${module}&limit=${limit}${vocabularyQuery}`,
       );
 
       setDailyQueue(shuffleQuestions(response.questions));
@@ -763,7 +776,7 @@ export function LearningApp({
         {visibleModules.length > 0 ? (
           <aside className="min-w-0 space-y-3 lg:sticky lg:top-24 lg:self-start">
             <nav
-              className="flex max-w-full snap-x gap-2 overflow-x-auto pb-2 lg:grid lg:overflow-visible lg:pb-0"
+              className="grid max-w-full grid-cols-2 gap-2 min-[420px]:grid-cols-3 lg:grid-cols-1"
               aria-label="学习模块"
             >
               {visibleModules.map((module) => (
@@ -771,7 +784,7 @@ export function LearningApp({
                   key={module.id}
                   href={module.href}
                   onClick={(event) => navigateToModule(event, module)}
-                  className={`min-w-[96px] shrink-0 snap-start rounded-md border px-3 py-2.5 text-left transition sm:w-[170px] sm:py-3 lg:w-auto ${
+                  className={`min-w-0 rounded-md border px-3 py-2.5 text-left transition sm:py-3 lg:w-auto ${
                     activeModule === module.id
                       ? "border-primary bg-primary text-primary-foreground shadow-sm"
                       : "border-border bg-card hover:border-primary/45"
@@ -950,8 +963,6 @@ export function LearningApp({
                 <VocabularyStudyPanel
                   vocabulary={studyVocabulary}
                   onReload={() => student && loadStudyVocabulary(student.id)}
-                  onStartSpelling={startSpellingPractice}
-                  loading={dailyLoading}
                 />
               ) : null}
             </>
@@ -1174,13 +1185,9 @@ function getPracticeCopy(kind: PracticeKind) {
 function VocabularyStudyPanel({
   vocabulary,
   onReload,
-  onStartSpelling,
-  loading,
 }: {
   vocabulary: VocabularyItem[];
   onReload: () => void;
-  onStartSpelling: () => void;
-  loading: boolean;
 }) {
   const [searchWord, setSearchWord] = useState("");
   const [searchResults, setSearchResults] = useState<VocabularyItem[]>([]);
@@ -1220,14 +1227,6 @@ function VocabularyStudyPanel({
           <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">词汇学习卡</h2>
         </div>
         <div className="grid min-w-0 gap-2 sm:flex">
-          <button
-            type="button"
-            onClick={onStartSpelling}
-            disabled={loading}
-            className="min-h-10 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "准备中" : "开启拼写练习"}
-          </button>
           <button
             type="button"
             onClick={onReload}
