@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { AccountPage, LoginPage, RegisterPage } from "@/components/account/account-pages";
 import { LearningApp } from "@/components/learning/learning-app";
+import { Toaster } from "@/components/ui/toast";
 import "@/src/globals.css";
 
 function normalizePath(pathname: string) {
@@ -61,6 +62,8 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <AppRoute />
+    <Toaster>
+      <AppRoute />
+    </Toaster>
   </StrictMode>,
 );
