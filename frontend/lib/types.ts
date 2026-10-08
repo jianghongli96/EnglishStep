@@ -166,5 +166,9 @@ export type AccountPayload = {
     profile: StudentProfile;
     linkedAt: string;
   }[];
+  parents?: {
+    user: AccountUser;
+    linkedAt: string;
+  }[];
   groups?: TeacherGroup[];
 };

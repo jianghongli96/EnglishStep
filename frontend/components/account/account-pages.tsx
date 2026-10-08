@@ -406,6 +406,9 @@ export function AccountPage() {
       {account.user.role === "student" ? (
         <section className="mt-5 rounded-lg border border-border bg-card p-5 shadow-sm">
           <h2 className="text-xl font-bold">学生关联</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            绑定后，家长可以查看学习情况；加入老师分组后，老师可以在分组中查看学习进度。
+          </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
             <input
               value={parentUserId}
@@ -436,14 +439,55 @@ export function AccountPage() {
               加入分组
             </button>
           </div>
-          <div className="mt-4">
-            <h3 className="font-bold">已加入分组</h3>
-            <div className="mt-2 space-y-2">
-              {(account.groups || []).map((group) => (
-                <p key={group.id} className="rounded-md bg-background p-3 text-sm">
-                  {group.name} · 老师：{group.teacherName || "未命名"}
-                </p>
-              ))}
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="font-bold">已绑定家长</h3>
+              <div className="mt-2 space-y-2">
+                {(account.parents || []).length > 0 ? (
+                  (account.parents || []).map((parent) => (
+                    <div
+                      key={parent.user.id}
+                      className="rounded-md bg-background p-3 text-sm"
+                    >
+                      <p className="font-semibold">{parent.user.name}</p>
+                      <p className="mt-1 break-all text-muted-foreground">
+                        ID：{parent.user.id}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-md bg-background p-3 text-sm text-muted-foreground">
+                    还没有绑定家长。
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold">已加入老师分组</h3>
+              <div className="mt-2 space-y-2">
+                {(account.groups || []).length > 0 ? (
+                  (account.groups || []).map((group) => (
+                    <div
+                      key={group.id}
+                      className="rounded-md bg-background p-3 text-sm"
+                    >
+                      <p className="font-semibold">{group.name}</p>
+                      <p className="mt-1 text-muted-foreground">
+                        老师：{group.teacherName || "未命名"}
+                      </p>
+                      <p className="mt-1 break-all text-muted-foreground">
+                        分享 ID：{group.shareCode}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-md bg-background p-3 text-sm text-muted-foreground">
+                    还没有加入老师分组。
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </section>

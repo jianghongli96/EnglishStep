@@ -663,6 +663,7 @@ function accountPayload(user, { includeToken = false } = {}) {
     const profile = findStudentProfile(user.id);
     payload.profile = profile;
     payload.student = ensureStudentRecordForUser(user, profile);
+    payload.parents = listStudentParents(user.id);
     payload.groups = listStudentGroups(user.id);
   }
   if (user?.role === "parent") {
@@ -1150,6 +1151,22 @@ function listParentChildren(parentUserId) {
         level: row.level,
         currentBook: row.current_book,
       },
+      linkedAt: row.linked_at,
+    }));
+}
+
+function listStudentParents(studentUserId) {
+  return db
+    .prepare(
+      `SELECT u.*, l.created_at AS linked_at
+       FROM parent_student_links l
+       JOIN users u ON u.id = l.parent_user_id
+       WHERE l.student_user_id = ? AND l.status = 'active'
+       ORDER BY l.created_at DESC`,
+    )
+    .all(studentUserId)
+    .map((row) => ({
+      user: rowToUser(row),
       linkedAt: row.linked_at,
     }));
 }
