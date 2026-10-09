@@ -3663,9 +3663,12 @@ function listVocabulary(limit = 50) {
     .map(rowToVocabulary);
 }
 
-function listStudyVocabulary(studentId, limit = 12) {
+function listStudyVocabulary(studentId, limit = 12, excludedIds = []) {
   const curriculum = getStudentCurriculumProfile(studentId);
   const useBeginnerSequence = usesBeginnerStarterSequence(curriculum);
+  const excludedIdSet = new Set(
+    excludedIds.map((id) => normalizeText(id)).filter(Boolean).slice(0, 100),
+  );
   const starterRows = useBeginnerSequence
     ? db
         .prepare(
@@ -3762,6 +3765,7 @@ function listStudyVocabulary(studentId, limit = 12) {
   const mergedRows = [];
   const seenWords = new Set();
   for (const row of [...starterRows, ...rows]) {
+    if (excludedIdSet.has(row.id)) continue;
     const word = row.word.toLowerCase();
     if (seenWords.has(word)) continue;
     seenWords.add(word);
@@ -3992,6 +3996,10 @@ async function route(req, res) {
   if (req.method === "GET" && url.pathname === "/api/vocabulary/study") {
     const studentId = url.searchParams.get("studentId") || "";
     const limit = Number(url.searchParams.get("limit") || 12);
+    const excludedIds = (url.searchParams.get("excludeIds") || "")
+      .split(",")
+      .map((id) => normalizeText(id))
+      .filter(Boolean);
     if (!canAccessStudent(authUser, studentId)) {
       forbidden(res);
       return;
@@ -4001,7 +4009,9 @@ async function route(req, res) {
       return;
     }
 
-    send(res, 200, { vocabulary: listStudyVocabulary(studentId, limit) });
+    send(res, 200, {
+      vocabulary: listStudyVocabulary(studentId, limit, excludedIds),
+    });
     return;
   }
 

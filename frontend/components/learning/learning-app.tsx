@@ -188,6 +188,8 @@ export function LearningApp({
   const [apiError, setApiError] = useState("");
   const autoStartedRef = useRef(false);
   const practiceProfileRefreshRef = useRef(false);
+  const shownVocabularyIdsRef = useRef(new Set<string>());
+  const shownVocabularyStudentIdRef = useRef("");
   const currentRole = account?.user.role;
   const dueMistakeCount = mistakes.filter((mistake) => mistake.isDue).length;
   const visibleMistakes = useMemo(
@@ -393,12 +395,37 @@ export function LearningApp({
     setMistakes(mistakeList.mistakes);
   }
 
-  async function loadStudyVocabulary(studentId: string) {
+  async function loadStudyVocabulary(studentId: string, excludedIds: string[] = []) {
+    if (shownVocabularyStudentIdRef.current !== studentId) {
+      shownVocabularyStudentIdRef.current = studentId;
+      shownVocabularyIdsRef.current.clear();
+    }
+    const excludeQuery = excludedIds.length
+      ? `&excludeIds=${encodeURIComponent(excludedIds.join(","))}`
+      : "";
     const response = await api<{ vocabulary: VocabularyItem[] }>(
-      `/api/vocabulary/study?studentId=${studentId}&limit=12`,
+      `/api/vocabulary/study?studentId=${studentId}&limit=12${excludeQuery}`,
     );
     setStudyVocabulary(response.vocabulary);
+    response.vocabulary.forEach((item) => shownVocabularyIdsRef.current.add(item.id));
     return response.vocabulary;
+  }
+
+  async function reloadStudyVocabulary() {
+    if (!student) return;
+    try {
+      const nextBatch = await loadStudyVocabulary(
+        student.id,
+        Array.from(shownVocabularyIdsRef.current),
+      );
+      if (nextBatch.length === 0) {
+        shownVocabularyIdsRef.current.clear();
+        studyVocabulary.forEach((item) => shownVocabularyIdsRef.current.add(item.id));
+        await loadStudyVocabulary(student.id, studyVocabulary.map((item) => item.id));
+      }
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "词汇学习内容加载失败。");
+    }
   }
 
   async function loadParentReport(studentId: string) {
@@ -1040,7 +1067,7 @@ export function LearningApp({
               {activeModule === "words" ? (
                 <VocabularyStudyPanel
                   vocabulary={studyVocabulary}
-                  onReload={() => student && loadStudyVocabulary(student.id)}
+                  onReload={reloadStudyVocabulary}
                 />
               ) : null}
             </>
@@ -1291,13 +1318,24 @@ function VocabularyStudyPanel({
   onReload,
 }: {
   vocabulary: VocabularyItem[];
-  onReload: () => void;
+  onReload: () => void | Promise<void>;
 }) {
   const [searchWord, setSearchWord] = useState("");
   const [searchResults, setSearchResults] = useState<VocabularyItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
+  const [reloading, setReloading] = useState(false);
+
+  async function reloadVocabulary() {
+    if (reloading) return;
+    setReloading(true);
+    try {
+      await onReload();
+    } finally {
+      setReloading(false);
+    }
+  }
 
   async function searchVocabulary() {
     const keyword = searchWord.trim();
@@ -1333,10 +1371,11 @@ function VocabularyStudyPanel({
         <div className="grid min-w-0 gap-2 sm:flex">
           <button
             type="button"
-            onClick={onReload}
+            onClick={() => void reloadVocabulary()}
+            disabled={reloading}
             className="min-h-10 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/50 sm:w-auto"
           >
-            换一批词
+            {reloading ? "正在换一批" : "换一批词"}
           </button>
         </div>
       </div>
