@@ -15,6 +15,9 @@ export type DailyTask = {
   completed: number;
   progress: number;
   mistakeCount: number;
+  available?: number;
+  backlog?: number;
+  recentAccuracy?: number | null;
 };
 
 export type DailyPlan = {
@@ -48,6 +51,7 @@ export type PracticeItem = {
   difficulty?: number;
   knowledgePoint?: string;
   practicePurpose?: "review" | "reinforcement" | "new";
+  isRemediation?: boolean;
 };
 
 export type VocabularyItem = {
@@ -93,6 +97,7 @@ export type Mistake = {
   lastReviewedAt?: string;
   nextReviewAt?: string;
   isDue: boolean;
+  resolvedAt?: string;
   question: PracticeItem | null;
 };
 

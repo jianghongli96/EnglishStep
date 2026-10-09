@@ -121,6 +121,23 @@ export function initSchema(db) {
       FOREIGN KEY(student_id) REFERENCES students(id)
     );
 
+    CREATE TABLE IF NOT EXISTS student_memory_items (
+      id TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL,
+      item_type TEXT NOT NULL CHECK(item_type IN ('vocabulary', 'knowledge')),
+      item_key TEXT NOT NULL,
+      mastery_stage INTEGER NOT NULL DEFAULT 0,
+      correct_streak INTEGER NOT NULL DEFAULT 0,
+      lapse_count INTEGER NOT NULL DEFAULT 0,
+      last_result TEXT CHECK(last_result IN ('correct', 'wrong')),
+      last_practiced_at TEXT,
+      next_review_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(student_id, item_type, item_key),
+      FOREIGN KEY(student_id) REFERENCES students(id)
+    );
+
     CREATE TABLE IF NOT EXISTS student_learning_states (
       student_id TEXT PRIMARY KEY,
       frequency_frontier INTEGER NOT NULL DEFAULT 500,
@@ -195,6 +212,8 @@ export function initSchema(db) {
       sort_order INTEGER NOT NULL,
       purpose TEXT NOT NULL DEFAULT 'new'
         CHECK(purpose IN ('review', 'reinforcement', 'new')),
+      is_remediation INTEGER NOT NULL DEFAULT 0,
+      memory_key TEXT,
       answered_at TEXT,
       correct INTEGER,
       FOREIGN KEY(session_id) REFERENCES practice_sessions(id),
@@ -207,6 +226,8 @@ export function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_session_questions_session_order
       ON session_questions(session_id, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_memory_items_due
+      ON student_memory_items(student_id, next_review_at, mastery_stage);
 
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -287,6 +308,8 @@ export function initSchema(db) {
 	  ensureColumn(db, "mistakes", "last_reviewed_at", "TEXT");
 	  ensureColumn(db, "mistakes", "next_review_at", "TEXT");
 	  ensureColumn(db, "session_questions", "purpose", "TEXT NOT NULL DEFAULT 'new'");
+	  ensureColumn(db, "session_questions", "is_remediation", "INTEGER NOT NULL DEFAULT 0");
+	  ensureColumn(db, "session_questions", "memory_key", "TEXT");
 	  ensureColumn(db, "vocabulary", "tag", "TEXT");
 	  ensureColumn(db, "vocabulary", "bnc", "INTEGER NOT NULL DEFAULT 0");
 	  ensureColumn(db, "vocabulary", "frq", "INTEGER NOT NULL DEFAULT 0");

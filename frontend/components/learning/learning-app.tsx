@@ -98,6 +98,7 @@ healthy,健康的,adj,Eating vegetables is healthy.,七年级,人教版,Unit 6,1
 
 type ModuleId = (typeof modules)[number]["id"];
 type ModuleRole = (typeof modules)[number]["roles"][number];
+type MistakeFilter = "due" | "scheduled" | "resolved";
 
 function canRoleViewModule(role: string | undefined, moduleId: ModuleId) {
   const module = modules.find((item) => item.id === moduleId);
@@ -164,6 +165,8 @@ export function LearningApp({
     {},
   );
   const [mistakes, setMistakes] = useState<Mistake[]>([]);
+  const [resolvedMistakes, setResolvedMistakes] = useState<Mistake[]>([]);
+  const [mistakeFilter, setMistakeFilter] = useState<MistakeFilter>("due");
   const [progress, setProgress] = useState<ProgressItem[]>([]);
   const [csvInput, setCsvInput] = useState("");
   const [importing, setImporting] = useState(false);
@@ -187,6 +190,16 @@ export function LearningApp({
   const practiceProfileRefreshRef = useRef(false);
   const currentRole = account?.user.role;
   const dueMistakeCount = mistakes.filter((mistake) => mistake.isDue).length;
+  const visibleMistakes = useMemo(
+    () =>
+      mistakeFilter === "resolved"
+        ? resolvedMistakes
+        : mistakes.filter((mistake) =>
+            mistakeFilter === "due" ? mistake.isDue : !mistake.isDue,
+          ),
+    [mistakeFilter, mistakes, resolvedMistakes],
+  );
+  const dailyTaskTotal = dailyTasks.reduce((total, task) => total + task.target, 0);
   const visibleModules = useMemo(
     () => modules.filter((module) => module.roles.includes(currentRole as ModuleRole)),
     [currentRole],
@@ -529,13 +542,25 @@ export function LearningApp({
             Boolean(question) && question.type !== "spelling",
         );
 
-      setMistakes(response.mistakes);
       setDailyQueue(shuffleQuestions(queue));
       setPracticeKind("mistakes");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "错题训练加载失败。");
     } finally {
       setDailyLoading(false);
+    }
+  }
+
+  async function changeMistakeFilter(filter: MistakeFilter) {
+    setMistakeFilter(filter);
+    if (filter !== "resolved" || !student) return;
+    try {
+      const response = await api<{ mistakes: Mistake[] }>(
+        `/api/students/${student.id}/mistakes?status=resolved`,
+      );
+      setResolvedMistakes(response.mistakes);
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "已掌握错题加载失败。");
     }
   }
 
@@ -601,6 +626,7 @@ export function LearningApp({
         result: Feedback;
         progress: ProgressItem[];
         mistakes: Mistake[];
+        session?: DailyPlan | null;
       }>("/api/attempts", {
         method: "POST",
         body: JSON.stringify({
@@ -613,12 +639,26 @@ export function LearningApp({
 
       setProgress(response.progress);
       setMistakes(response.mistakes);
+      if (practiceKind === "daily" && response.session?.questions) {
+        setDailyQueue(response.session.questions);
+        setDailyCorrect(response.session.correctCount);
+        setDailyWrong(response.session.wrongCount);
+      }
 
       if (response.result.correct) {
-        setDailyCorrect((count) => count + 1);
-        goToNextDailyQuestion();
+        if (practiceKind === "daily" && response.session) {
+          setDailyIndex(response.session.currentIndex);
+          setDailyFeedback(null);
+          setDailySelected("");
+          if (response.session.status === "completed") refreshProfileAfterPractice();
+        } else {
+          setDailyCorrect((count) => count + 1);
+          goToNextDailyQuestion();
+        }
       } else {
-        setDailyWrong((count) => count + 1);
+        if (practiceKind !== "daily" || !response.session) {
+          setDailyWrong((count) => count + 1);
+        }
         setDailyFeedback(response.result);
       }
     } catch (error) {
@@ -922,6 +962,22 @@ export function LearningApp({
                   来自后端的个性化任务
                 </span>
               </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-semibold">今日共 {dailyTaskTotal} 题</span>
+                {dailyTasks.map((task) => (
+                  <span
+                    key={`summary-${task.id}`}
+                    className="rounded-md bg-secondary px-2.5 py-1.5 text-secondary-foreground"
+                  >
+                    {task.title} {task.target}
+                  </span>
+                ))}
+                {dailyTasks[0]?.recentAccuracy != null ? (
+                  <span className="text-muted-foreground">
+                    近期正确率 {dailyTasks[0].recentAccuracy}%
+                  </span>
+                ) : null}
+              </div>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 {dailyTasks.map((task) => (
                   <article
@@ -943,7 +999,9 @@ export function LearningApp({
                     <p className="mt-3 text-sm text-muted-foreground">
                       {task.purpose === "review"
                         ? task.mistakeCount > 0
-                          ? `今天到期 ${task.mistakeCount} 道`
+                          ? task.backlog
+                            ? `今天安排 ${task.target} 道，另有 ${task.backlog} 道顺延`
+                            : `今天到期 ${task.mistakeCount} 道，已全部安排`
                           : "今天没有到期内容，名额已转为新学"
                         : task.detail}
                     </p>
@@ -1026,13 +1084,37 @@ export function LearningApp({
                   {dailyLoading ? "准备中" : "复习今天到期的错题"}
                 </button>
               </div>
-              {mistakes.length === 0 ? (
+              <div className="mt-4 grid grid-cols-3 gap-2 rounded-md bg-muted p-1">
+                {([
+                  ["due", `今天到期 ${dueMistakeCount}`],
+                  ["scheduled", `未来计划 ${mistakes.length - dueMistakeCount}`],
+                  ["resolved", "已掌握"],
+                ] as const).map(([filter, label]) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => void changeMistakeFilter(filter)}
+                    className={`min-w-0 rounded-md px-2 py-2.5 text-xs font-semibold sm:text-sm ${
+                      mistakeFilter === filter
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {visibleMistakes.length === 0 ? (
                 <p className="mt-3 rounded-md bg-secondary p-4 text-sm text-muted-foreground">
-                  还没有错题。做错的词汇、语法和阅读题会自动出现在这里。
+                  {mistakeFilter === "due"
+                    ? "今天没有到期错题，可以继续学习新内容。"
+                    : mistakeFilter === "scheduled"
+                      ? "目前没有等待后续复习的错题。"
+                      : "还没有完成全部间隔阶段的错题。"}
                 </p>
               ) : (
                 <div className="mt-4 space-y-3">
-                  {mistakes.map((item) => (
+                  {visibleMistakes.map((item) => (
                     <article
                       key={item.id}
                       className="rounded-md border border-border bg-background p-4"
@@ -1045,7 +1127,9 @@ export function LearningApp({
                         {item.knowledgePoint}
                       </p>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        复习阶段：{item.reviewStage}/4 · {reviewTimeLabel(item.nextReviewAt)}
+                        {mistakeFilter === "resolved"
+                          ? "已完成间隔复习"
+                          : `复习阶段：${item.reviewStage}/4 · ${reviewTimeLabel(item.nextReviewAt)}`}
                         {item.reviewCount > 0 ? ` · 已复习 ${item.reviewCount} 次` : ""}
                       </p>
                       <p className="mt-2 text-sm text-coral-strong">

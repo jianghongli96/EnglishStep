@@ -83,6 +83,7 @@ initSchema(db);
 ensureVocabularyUuidIds();
 ensureVocabularyDifficultyFromFrequency();
 ensureVocabularySpellingRules();
+backfillStudentMemoryItems();
 ensureBuiltInAdminAccount();
 if (AUTO_SEED_DATABASE && (isNewDatabase || countRows("questions") === 0)) {
   await seedDatabase();
@@ -611,6 +612,58 @@ function ensureVocabularyDifficultyFromFrequency() {
   });
 }
 
+function backfillStudentMemoryItems() {
+  if (countRows("student_memory_items") > 0 || countRows("attempts") === 0) return;
+  const latestAttempts = db
+    .prepare(
+      `SELECT a.student_id, a.correct, a.created_at,
+              q.vocabulary_id, q.knowledge_point
+       FROM attempts a
+       JOIN questions q ON q.id = a.question_id
+       ORDER BY a.created_at DESC`,
+    )
+    .all();
+  const seen = new Set();
+  const rows = [];
+  for (const attempt of latestAttempts) {
+    const itemType = attempt.vocabulary_id ? "vocabulary" : "knowledge";
+    const itemKey = attempt.vocabulary_id || attempt.knowledge_point;
+    if (!itemKey) continue;
+    const key = `${attempt.student_id}:${itemType}:${itemKey}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({ ...attempt, itemType, itemKey });
+  }
+  if (!rows.length) return;
+
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO student_memory_items (
+      id, student_id, item_type, item_key, mastery_stage, correct_streak,
+      lapse_count, last_result, last_practiced_at, next_review_at,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  withTransaction(() => {
+    for (const row of rows) {
+      const correct = Number(row.correct) === 1;
+      insert.run(
+        randomUUID(),
+        row.student_id,
+        row.itemType,
+        row.itemKey,
+        correct ? 1 : 0,
+        correct ? 1 : 0,
+        correct ? 0 : 1,
+        correct ? "correct" : "wrong",
+        row.created_at,
+        reviewDateAfter(row.created_at, 1),
+        row.created_at,
+        row.created_at,
+      );
+    }
+  });
+}
+
 function send(res, status, payload) {
   writeJson(res, status, payload, jsonHeaders);
 }
@@ -744,6 +797,7 @@ function rowToQuestion(row, includeAnswer = true) {
     createdAt: row.created_at,
   };
   if (row.session_purpose) question.practicePurpose = row.session_purpose;
+  if (row.session_is_remediation) question.isRemediation = Boolean(row.session_is_remediation);
   if (includeAnswer) question.answer = row.answer;
   return question;
 }
@@ -762,7 +816,9 @@ function rowToMistake(row) {
     reviewStage: Number(row.review_stage || 0),
     lastReviewedAt: row.last_reviewed_at,
     nextReviewAt: row.next_review_at,
-    isDue: !row.next_review_at || row.next_review_at <= new Date().toISOString(),
+    isDue:
+      !row.resolved_at &&
+      (!row.next_review_at || row.next_review_at <= new Date().toISOString()),
     createdAt: row.created_at,
     resolvedAt: row.resolved_at,
   };
@@ -876,6 +932,13 @@ function ensureStudentRecordForUser(user, profile) {
   if (existing) return existing;
 
   const normalizedName = normalizeText(user.name).toLowerCase();
+  const nameConflict = db
+    .prepare("SELECT id FROM students WHERE normalized_name = ? AND grade = ?")
+    .get(normalizedName, profile.grade);
+  const storedNormalizedName =
+    nameConflict && nameConflict.id !== user.id
+      ? `${normalizedName}:${user.id}`
+      : normalizedName;
   db.prepare(
     `INSERT OR IGNORE INTO students
       (id, name, normalized_name, grade, level, created_at)
@@ -883,7 +946,7 @@ function ensureStudentRecordForUser(user, profile) {
   ).run(
     user.id,
     user.name,
-    normalizedName,
+    storedNormalizedName,
     profile.grade,
     profile.level,
     user.createdAt,
@@ -1027,16 +1090,23 @@ function getQuestion(questionId, includeAnswer = true) {
   );
 }
 
-function getStudentMistakes(studentId, dueOnly = false) {
+function getStudentMistakes(studentId, status = "active") {
+  const now = new Date().toISOString();
+  const conditions = {
+    active: "resolved_at IS NULL",
+    due: "resolved_at IS NULL AND (next_review_at IS NULL OR next_review_at <= ?)",
+    scheduled: "resolved_at IS NULL AND next_review_at > ?",
+    resolved: "resolved_at IS NOT NULL",
+  };
+  const normalizedStatus = conditions[status] ? status : "active";
+  const usesNow = normalizedStatus === "due" || normalizedStatus === "scheduled";
   const rows = db
     .prepare(
       `SELECT * FROM mistakes
-       WHERE student_id = ? AND resolved_at IS NULL
-         AND (? = 0 OR next_review_at IS NULL OR next_review_at <= ?)
-       ORDER BY CASE WHEN next_review_at IS NULL OR next_review_at <= ? THEN 0 ELSE 1 END,
-                next_review_at ASC, created_at DESC`,
+       WHERE student_id = ? AND ${conditions[normalizedStatus]}
+       ORDER BY COALESCE(resolved_at, next_review_at, created_at) DESC`,
     )
-    .all(studentId, dueOnly ? 1 : 0, new Date().toISOString(), new Date().toISOString());
+    .all(...(usesNow ? [studentId, now] : [studentId]));
 
   return rows.map((row) => {
     const mistake = rowToMistake(row);
@@ -1205,6 +1275,7 @@ function buildParentReport(studentId) {
 }
 
 function buildDailyTasks(studentId, sessionId = "") {
+  const allocation = getDailyAllocation(studentId);
   const session = sessionId
     ? db
         .prepare("SELECT * FROM practice_sessions WHERE id = ? AND student_id = ?")
@@ -1237,6 +1308,8 @@ function buildDailyTasks(studentId, sessionId = "") {
 
     return dailyTaskPlan.map((task) => {
       const planned = plannedByPurpose.get(task.purpose) || { total: 0, completed: 0 };
+      const remainingReview =
+        task.purpose === "review" ? Math.max(0, planned.total - planned.completed) : 0;
       return {
         ...task,
         target: planned.total,
@@ -1244,23 +1317,26 @@ function buildDailyTasks(studentId, sessionId = "") {
         progress: planned.total
           ? Math.min(100, Math.round((planned.completed / planned.total) * 100))
           : 100,
-        mistakeCount: task.purpose === "review" ? countDueReviews(studentId) : 0,
+        mistakeCount: task.purpose === "review" ? allocation.dueTotal : 0,
+        available: task.purpose === "review" ? allocation.dueTotal : planned.total,
+        backlog:
+          task.purpose === "review"
+            ? Math.max(0, allocation.dueTotal - remainingReview)
+            : 0,
+        recentAccuracy: allocation.recentAccuracy,
       };
     });
   }
 
-  const dueTarget = Math.min(5, countDueReviews(studentId));
   return dailyTaskPlan.map((task) => ({
     ...task,
-    target:
-      task.purpose === "review"
-        ? dueTarget
-        : task.purpose === "new"
-          ? task.target + (5 - dueTarget)
-          : task.target,
+    target: allocation[task.purpose],
     completed: 0,
     progress: 0,
-    mistakeCount: task.purpose === "review" ? dueTarget : 0,
+    mistakeCount: task.purpose === "review" ? allocation.dueTotal : 0,
+    available: task.purpose === "review" ? allocation.dueTotal : allocation[task.purpose],
+    backlog: task.purpose === "review" ? allocation.backlog : 0,
+    recentAccuracy: allocation.recentAccuracy,
   }));
 }
 
@@ -1268,23 +1344,47 @@ function countDueReviews(studentId) {
   const now = new Date().toISOString();
   const row = db
     .prepare(
-      `SELECT COUNT(DISTINCT question_id) AS total FROM (
-         SELECT m.question_id
-         FROM mistakes m
-         JOIN questions q ON q.id = m.question_id
-         WHERE m.student_id = ? AND m.resolved_at IS NULL
-           AND (m.next_review_at IS NULL OR m.next_review_at <= ?)
-           AND q.status = 'published' AND q.type <> 'spelling'
-         UNION
-         SELECT q.id AS question_id
-         FROM student_knowledge sk
-         JOIN questions q ON q.knowledge_point = sk.knowledge_point
-         WHERE sk.student_id = ? AND sk.next_review_at <= ?
-           AND q.status = 'published' AND q.type <> 'spelling'
+      `SELECT COUNT(*) AS total
+       FROM student_memory_items
+       WHERE student_id = ? AND next_review_at <= ?`,
+    )
+    .get(studentId, now);
+  return Number(row.total || 0);
+}
+
+function getDailyAllocation(studentId) {
+  const totalTarget = 15;
+  const dueTotal = countDueReviews(studentId);
+  const recent = db
+    .prepare(
+      `SELECT COUNT(*) AS total, SUM(correct) AS correct FROM (
+         SELECT correct FROM attempts
+         WHERE student_id = ?
+         ORDER BY created_at DESC LIMIT 30
        )`,
     )
-    .get(studentId, now, studentId, now);
-  return Number(row.total || 0);
+    .get(studentId);
+  const recentTotal = Number(recent.total || 0);
+  const recentAccuracy = recentTotal >= 10
+    ? Math.round((Number(recent.correct || 0) / recentTotal) * 100)
+    : null;
+  const review = Math.min(8, dueTotal);
+  let reinforcement =
+    recentAccuracy !== null && recentAccuracy < 60
+      ? 6
+      : recentAccuracy !== null && recentAccuracy >= 85
+        ? 2
+        : 4;
+  reinforcement = Math.min(reinforcement, Math.max(0, totalTarget - review - 2));
+  const newCount = Math.max(0, totalTarget - review - reinforcement);
+  return {
+    review,
+    reinforcement,
+    new: newCount,
+    dueTotal,
+    backlog: Math.max(0, dueTotal - review),
+    recentAccuracy,
+  };
 }
 
 function getTodayKey() {
@@ -1354,7 +1454,9 @@ function getPracticeSessionQuestionRows(sessionId) {
     .prepare(
       `SELECT q.*, sq.answered_at AS session_answered_at,
               sq.correct AS session_correct, sq.sort_order AS session_sort_order,
-              sq.purpose AS session_purpose
+              sq.purpose AS session_purpose,
+              sq.is_remediation AS session_is_remediation,
+              sq.memory_key AS session_memory_key
        FROM session_questions sq
        JOIN questions q ON q.id = sq.question_id
        WHERE sq.session_id = ?
@@ -1404,45 +1506,57 @@ function filterDailyCandidates(rows, excludedIds, limit) {
     .slice(0, limit);
 }
 
+function memoryIdentityForQuestion(question) {
+  if (question?.vocabularyId || question?.vocabulary_id) {
+    return {
+      itemType: "vocabulary",
+      itemKey: question.vocabularyId || question.vocabulary_id,
+    };
+  }
+  return {
+    itemType: "knowledge",
+    itemKey: question?.knowledgePoint || question?.knowledge_point || "",
+  };
+}
+
+function serializedMemoryKey(question) {
+  const identity = memoryIdentityForQuestion(question);
+  return `${identity.itemType}:${identity.itemKey}`;
+}
+
 function selectDueReviewRows(studentId, limit, excludedIds = []) {
   const now = new Date().toISOString();
-  const mistakeRows = db
+  const rows = db
     .prepare(
-      `SELECT q.* FROM mistakes m
-       JOIN questions q ON q.id = m.question_id
-       WHERE m.student_id = ? AND m.resolved_at IS NULL
-         AND (m.next_review_at IS NULL OR m.next_review_at <= ?)
+      `SELECT q.*, memory.item_type AS memory_item_type,
+              memory.item_key AS memory_item_key,
+              memory.next_review_at AS memory_next_review_at,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM mistakes m
+                WHERE m.student_id = memory.student_id
+                  AND m.question_id = q.id AND m.resolved_at IS NULL
+              ) THEN 0 ELSE 1 END AS exact_mistake_priority
+       FROM student_memory_items memory
+       JOIN questions q ON (
+         (memory.item_type = 'vocabulary' AND q.vocabulary_id = memory.item_key)
+         OR
+         (memory.item_type = 'knowledge' AND q.knowledge_point = memory.item_key)
+       )
+       WHERE memory.student_id = ? AND memory.next_review_at <= ?
          AND q.status = 'published' AND q.type <> 'spelling'
-       ORDER BY COALESCE(m.next_review_at, m.created_at) ASC`,
+       ORDER BY memory.next_review_at ASC, exact_mistake_priority ASC,
+                ABS(q.difficulty - 2) ASC, RANDOM()
+       LIMIT 150`,
     )
     .all(studentId, now);
-  const selected = filterDailyCandidates(mistakeRows, excludedIds, limit);
-  if (selected.length >= limit) return selected;
-
-  const knowledgeRows = db
-    .prepare(
-      `SELECT q.* FROM student_knowledge sk
-       JOIN questions q ON q.knowledge_point = sk.knowledge_point
-       WHERE sk.student_id = ? AND sk.next_review_at <= ?
-         AND q.status = 'published' AND q.type <> 'spelling'
-       ORDER BY sk.next_review_at ASC, sk.mastery_level ASC, RANDOM()
-       LIMIT 100`,
-    )
-    .all(studentId, now);
-  const seenKnowledgePoints = new Set(selected.map((row) => row.knowledge_point));
-  const uniqueKnowledgeRows = knowledgeRows.filter((row) => {
-    if (seenKnowledgePoints.has(row.knowledge_point)) return false;
-    seenKnowledgePoints.add(row.knowledge_point);
+  const seenItems = new Set();
+  const uniqueRows = rows.filter((row) => {
+    const key = `${row.memory_item_type}:${row.memory_item_key}`;
+    if (seenItems.has(key)) return false;
+    seenItems.add(key);
     return true;
   });
-  return [
-    ...selected,
-    ...filterDailyCandidates(
-      uniqueKnowledgeRows,
-      [...excludedIds, ...selected.map((row) => row.id)],
-      limit - selected.length,
-    ),
-  ];
+  return filterDailyCandidates(uniqueRows, excludedIds, limit);
 }
 
 function selectReinforcementRows(studentId, limit, excludedIds = []) {
@@ -1451,11 +1565,17 @@ function selectReinforcementRows(studentId, limit, excludedIds = []) {
   const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const rows = db
     .prepare(
-      `SELECT q.* FROM student_knowledge sk
-       JOIN questions q ON q.knowledge_point = sk.knowledge_point
+      `SELECT q.*, memory.item_type AS memory_item_type,
+              memory.item_key AS memory_item_key
+       FROM student_memory_items memory
+       JOIN questions q ON (
+         (memory.item_type = 'vocabulary' AND q.vocabulary_id = memory.item_key)
+         OR
+         (memory.item_type = 'knowledge' AND q.knowledge_point = memory.item_key)
+       )
        LEFT JOIN vocabulary v ON v.id = q.vocabulary_id
-       WHERE sk.student_id = ? AND sk.mastery_level <= 3
-         AND (sk.next_review_at IS NULL OR sk.next_review_at > ?)
+       WHERE memory.student_id = ? AND memory.mastery_stage <= 3
+         AND (memory.next_review_at IS NULL OR memory.next_review_at > ?)
          AND q.status = 'published' AND q.type <> 'spelling'
          AND q.difficulty <= ?
          AND NOT EXISTS (
@@ -1471,7 +1591,7 @@ function selectReinforcementRows(studentId, limit, excludedIds = []) {
              ELSE 999999
            END <= ?
          ))
-       ORDER BY sk.mastery_level ASC,
+       ORDER BY memory.mastery_stage ASC,
                 ABS(q.difficulty - ?) ASC, RANDOM()
        LIMIT 100`,
     )
@@ -1486,8 +1606,9 @@ function selectReinforcementRows(studentId, limit, excludedIds = []) {
     );
   const seenKnowledgePoints = new Set();
   const uniqueRows = rows.filter((row) => {
-    if (seenKnowledgePoints.has(row.knowledge_point)) return false;
-    seenKnowledgePoints.add(row.knowledge_point);
+    const key = `${row.memory_item_type}:${row.memory_item_key}`;
+    if (seenKnowledgePoints.has(key)) return false;
+    seenKnowledgePoints.add(key);
     return true;
   });
   return filterDailyCandidates(uniqueRows, excludedIds, limit);
@@ -1562,11 +1683,20 @@ function getOrCreateDailyPracticeSession(studentId, requestedMode = "resume") {
     )
     .all(studentId, sessionDate)
     .map((row) => row.question_id);
+  const allocation = getDailyAllocation(studentId);
   const plannedQuestions = [];
-  const reviewRows = selectDueReviewRows(studentId, 5, excludedQuestionIds);
+  const reviewRows = selectDueReviewRows(
+    studentId,
+    allocation.review,
+    excludedQuestionIds,
+  );
   plannedQuestions.push(...reviewRows.map((row) => ({ row, purpose: "review" })));
   const afterReview = [...excludedQuestionIds, ...reviewRows.map((row) => row.id)];
-  const reinforcementRows = selectReinforcementRows(studentId, 4, afterReview);
+  const reinforcementRows = selectReinforcementRows(
+    studentId,
+    allocation.reinforcement,
+    afterReview,
+  );
   plannedQuestions.push(
     ...reinforcementRows.map((row) => ({ row, purpose: "reinforcement" })),
   );
@@ -1622,11 +1752,19 @@ function getOrCreateDailyPracticeSession(studentId, requestedMode = "resume") {
 
     const insertQuestion = db.prepare(
       `INSERT INTO session_questions (
-        id, session_id, question_id, sort_order, purpose, answered_at, correct
-      ) VALUES (?, ?, ?, ?, ?, NULL, NULL)`,
+        id, session_id, question_id, sort_order, purpose,
+        is_remediation, memory_key, answered_at, correct
+      ) VALUES (?, ?, ?, ?, ?, 0, ?, NULL, NULL)`,
     );
     shuffledQuestions.forEach((item, index) => {
-      insertQuestion.run(randomUUID(), session.id, item.row.id, index, item.purpose);
+      insertQuestion.run(
+        randomUUID(),
+        session.id,
+        item.row.id,
+        index,
+        item.purpose,
+        serializedMemoryKey(item.row),
+      );
     });
   });
 
@@ -2620,6 +2758,194 @@ function maybeUpdateStudentLearningState(studentId) {
   return ensureStudentLearningState(studentId);
 }
 
+function updateStudentMemoryItem(
+  studentId,
+  question,
+  correct,
+  now,
+  { isRemediation = false } = {},
+) {
+  const { itemType, itemKey } = memoryIdentityForQuestion(question);
+  if (!itemKey) return null;
+  const existing = db
+    .prepare(
+      `SELECT * FROM student_memory_items
+       WHERE student_id = ? AND item_type = ? AND item_key = ?`,
+    )
+    .get(studentId, itemType, itemKey);
+
+  if (!existing) {
+    const stage = correct && !isRemediation ? 1 : 0;
+    db.prepare(
+      `INSERT INTO student_memory_items (
+        id, student_id, item_type, item_key, mastery_stage, correct_streak,
+        lapse_count, last_result, last_practiced_at, next_review_at,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      randomUUID(),
+      studentId,
+      itemType,
+      itemKey,
+      stage,
+      correct ? 1 : 0,
+      correct ? 0 : 1,
+      correct ? "correct" : "wrong",
+      now,
+      reviewDateAfter(now, 1),
+      now,
+      now,
+    );
+  } else if (!correct) {
+    db.prepare(
+      `UPDATE student_memory_items
+       SET mastery_stage = 0, correct_streak = 0,
+           lapse_count = lapse_count + 1, last_result = 'wrong',
+           last_practiced_at = ?, next_review_at = ?, updated_at = ?
+       WHERE id = ?`,
+    ).run(now, reviewDateAfter(now, 1), now, existing.id);
+  } else if (isRemediation) {
+    db.prepare(
+      `UPDATE student_memory_items
+       SET last_result = 'correct', last_practiced_at = ?, updated_at = ?
+       WHERE id = ?`,
+    ).run(now, now, existing.id);
+  } else {
+    const isDue = !existing.next_review_at || existing.next_review_at <= now;
+    const nextStage = isDue
+      ? Math.min(5, Number(existing.mastery_stage || 0) + 1)
+      : Number(existing.mastery_stage || 0);
+    const intervals = [1, 1, 3, 7, 14, 30];
+    db.prepare(
+      `UPDATE student_memory_items
+       SET mastery_stage = ?, correct_streak = correct_streak + 1,
+           last_result = 'correct', last_practiced_at = ?,
+           next_review_at = CASE WHEN ? = 1 THEN ? ELSE next_review_at END,
+           updated_at = ?
+       WHERE id = ?`,
+    ).run(
+      nextStage,
+      now,
+      isDue ? 1 : 0,
+      reviewDateAfter(now, intervals[nextStage]),
+      now,
+      existing.id,
+    );
+  }
+
+  return db
+    .prepare(
+      `SELECT * FROM student_memory_items
+       WHERE student_id = ? AND item_type = ? AND item_key = ?`,
+    )
+    .get(studentId, itemType, itemKey);
+}
+
+function appendRemediationQuestion(session, question) {
+  const memoryKey = serializedMemoryKey(question);
+  const existingCount = db
+    .prepare(
+      `SELECT COUNT(*) AS total FROM session_questions
+       WHERE session_id = ? AND is_remediation = 1 AND memory_key = ?`,
+    )
+    .get(session.id, memoryKey);
+  if (Number(existingCount.total || 0) >= 2) return false;
+
+  const identity = memoryIdentityForQuestion(question);
+  const candidate = db
+    .prepare(
+      `SELECT q.* FROM questions q
+       WHERE q.status = 'published' AND q.type <> 'spelling'
+         AND json_array_length(q.options_json) > 1
+         AND q.id NOT IN (
+           SELECT question_id FROM session_questions WHERE session_id = ?
+         )
+         AND (
+           (? = 'vocabulary' AND q.vocabulary_id = ?)
+           OR
+           (? = 'knowledge' AND q.knowledge_point = ?)
+         )
+       ORDER BY ABS(q.difficulty - ?) ASC, RANDOM()
+       LIMIT 1`,
+    )
+    .get(
+      session.id,
+      identity.itemType,
+      identity.itemKey,
+      identity.itemType,
+      identity.itemKey,
+      question.difficulty || 1,
+    );
+  if (!candidate) return false;
+
+  const last = db
+    .prepare(
+      `SELECT COALESCE(MAX(sort_order), -1) AS last_order
+       FROM session_questions WHERE session_id = ?`,
+    )
+    .get(session.id);
+  db.prepare(
+    `INSERT INTO session_questions (
+      id, session_id, question_id, sort_order, purpose,
+      is_remediation, memory_key, answered_at, correct
+    ) VALUES (?, ?, ?, ?, 'reinforcement', 1, ?, NULL, NULL)`,
+  ).run(
+    randomUUID(),
+    session.id,
+    candidate.id,
+    Number(last.last_order) + 1,
+    memoryKey,
+  );
+  db.prepare(
+    `UPDATE practice_sessions SET target_count = target_count + 1 WHERE id = ?`,
+  ).run(session.id);
+  return true;
+}
+
+function syncRelatedMistakesWithMemory(
+  studentId,
+  question,
+  memory,
+  correct,
+  now,
+  { isRemediation = false } = {},
+) {
+  if (!memory || (correct && isRemediation)) return;
+  const identity = memoryIdentityForQuestion(question);
+  const relatedFilter =
+    identity.itemType === "vocabulary"
+      ? "q.vocabulary_id = ?"
+      : "q.knowledge_point = ?";
+  if (!correct) {
+    db.prepare(
+      `UPDATE mistakes
+       SET review_stage = 0, correct_review_streak = 0,
+           next_review_at = ?, last_reviewed_at = ?
+       WHERE student_id = ? AND resolved_at IS NULL
+         AND question_id IN (SELECT q.id FROM questions q WHERE ${relatedFilter})`,
+    ).run(memory.next_review_at, now, studentId, identity.itemKey);
+    return;
+  }
+
+  const resolvedAt = Number(memory.mastery_stage || 0) >= 4 ? now : null;
+  db.prepare(
+    `UPDATE mistakes
+     SET review_stage = ?, correct_review_streak = ?,
+         next_review_at = ?, last_reviewed_at = ?,
+         resolved_at = COALESCE(?, resolved_at)
+     WHERE student_id = ? AND resolved_at IS NULL
+       AND question_id IN (SELECT q.id FROM questions q WHERE ${relatedFilter})`,
+  ).run(
+    Number(memory.mastery_stage || 0),
+    Number(memory.correct_streak || 0),
+    memory.next_review_at,
+    now,
+    resolvedAt,
+    studentId,
+    identity.itemKey,
+  );
+}
+
 async function handleAttempt(req, res) {
   const body = await parseBody(req);
   const student = findStudent(body.studentId);
@@ -2642,16 +2968,19 @@ async function handleAttempt(req, res) {
   }
 
   const practiceSession = sessionId ? getPracticeSession(sessionId) : null;
+  const sessionQuestion = sessionId
+    ? db
+        .prepare(
+          `SELECT * FROM session_questions
+           WHERE session_id = ? AND question_id = ?`,
+        )
+        .get(sessionId, question.id)
+    : null;
   if (
     sessionId &&
     (!practiceSession ||
       practiceSession.student_id !== student.id ||
-      !db
-        .prepare(
-          `SELECT 1 FROM session_questions
-           WHERE session_id = ? AND question_id = ?`,
-        )
-        .get(sessionId, question.id))
+      !sessionQuestion)
   ) {
     badRequest(res, "sessionId does not contain this question");
     return;
@@ -2669,6 +2998,7 @@ async function handleAttempt(req, res) {
     (acceptedAnswer) => normalizeAnswer(answer) === normalizeAnswer(acceptedAnswer),
   );
   const now = new Date().toISOString();
+  const isRemediation = Boolean(sessionQuestion?.is_remediation);
   const attempt = {
     id: randomUUID(),
     studentId: student.id,
@@ -2736,7 +3066,7 @@ async function handleAttempt(req, res) {
       ).run(answer, now, scheduleAfterDays(1), existingMistake.id);
     }
 
-    if (correct && existingMistake) {
+    if (correct && existingMistake && !isRemediation) {
       const nextReviewStage = Number(existingMistake.review_stage || 0) + 1;
       const resolvedAt = nextReviewStage >= 4 ? now : null;
       const reviewIntervals = [1, 3, 7, 14];
@@ -2762,7 +3092,20 @@ async function handleAttempt(req, res) {
       );
     }
 
-    updateStudentKnowledge(student.id, question.knowledgePoint, correct, now);
+    if (!isRemediation || !correct) {
+      updateStudentKnowledge(student.id, question.knowledgePoint, correct, now);
+    }
+    const memory = updateStudentMemoryItem(student.id, question, correct, now, {
+      isRemediation,
+    });
+    syncRelatedMistakesWithMemory(
+      student.id,
+      question,
+      memory,
+      correct,
+      now,
+      { isRemediation },
+    );
 
     if (practiceSession?.status === "active") {
       db.prepare(
@@ -2771,6 +3114,10 @@ async function handleAttempt(req, res) {
              correct = COALESCE(correct, ?)
          WHERE session_id = ? AND question_id = ?`,
       ).run(now, correct ? 1 : 0, practiceSession.id, question.id);
+
+      if (!correct) {
+        appendRemediationQuestion(practiceSession, question);
+      }
 
       const remaining = db
         .prepare(
@@ -2800,14 +3147,7 @@ async function handleAttempt(req, res) {
       correctAnswer: question.answer,
       explain: question.explain,
     },
-    session: updatedSession
-      ? {
-          id: updatedSession.id,
-          status: updatedSession.status,
-          currentIndex: updatedSession.currentIndex,
-          completedAt: updatedSession.completedAt,
-        }
-      : null,
+    session: updatedSession,
     progress: buildProgress(student.id),
     mistakes: getStudentMistakes(student.id),
     learningState,
@@ -2878,7 +3218,11 @@ function nextReviewAt(masteryLevel, correct) {
 }
 
 function scheduleAfterDays(days) {
-  const date = new Date();
+  return reviewDateAfter(new Date().toISOString(), days);
+}
+
+function reviewDateAfter(baseTime, days) {
+  const date = new Date(baseTime);
   date.setDate(date.getDate() + days);
   return date.toISOString();
 }
@@ -3582,8 +3926,11 @@ async function route(req, res) {
     }
 
     if (req.method === "GET" && segments[3] === "mistakes") {
+      const requestedStatus =
+        url.searchParams.get("status") ||
+        (url.searchParams.get("due") === "1" ? "due" : "active");
       send(res, 200, {
-        mistakes: getStudentMistakes(studentId, url.searchParams.get("due") === "1"),
+        mistakes: getStudentMistakes(studentId, requestedStatus),
       });
       return;
     }

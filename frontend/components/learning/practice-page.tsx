@@ -205,7 +205,9 @@ export function PracticePage({
                   </span>
                   {question.practicePurpose ? (
                     <span className="text-sm font-semibold text-teal-700">
-                      {purposeLabels[question.practicePurpose]}
+                      {question.isRemediation
+                        ? "即时纠错"
+                        : purposeLabels[question.practicePurpose]}
                     </span>
                   ) : null}
                 </div>
