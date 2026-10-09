@@ -645,24 +645,17 @@ export function LearningApp({
         setDailyWrong(response.session.wrongCount);
       }
 
-      if (response.result.correct) {
-        if (practiceKind === "daily" && response.session) {
-          setDailyIndex(response.session.currentIndex);
-          setDailyFeedback(null);
-          setDailySelected("");
-          if (response.session.status === "completed") refreshProfileAfterPractice();
-        } else {
+      if (practiceKind !== "daily" || !response.session) {
+        if (response.result.correct) {
           setDailyCorrect((count) => count + 1);
-          goToNextDailyQuestion();
-        }
-      } else {
-        if (practiceKind !== "daily" || !response.session) {
+        } else {
           setDailyWrong((count) => count + 1);
         }
-        setDailyFeedback(response.result);
       }
+      setDailyFeedback(response.result);
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "答题提交失败。");
+      setDailySelected("");
     }
   }
 

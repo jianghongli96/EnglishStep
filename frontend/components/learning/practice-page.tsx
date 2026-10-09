@@ -18,6 +18,11 @@ const purposeLabels: Record<string, string> = {
   new: "新内容",
 };
 
+function getCompletedSentence(question: PracticeItem, correctAnswer: string) {
+  if (!question.prompt.includes("__")) return "";
+  return question.prompt.replace(/_{2,}/g, correctAnswer);
+}
+
 function getCompletionEncouragement(correctCount: number, wrongCount: number) {
   const totalCount = correctCount + wrongCount;
   const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
@@ -102,6 +107,9 @@ export function PracticePage({
   const totalAnswered = correctCount + wrongCount;
   const encouragement = getCompletionEncouragement(correctCount, wrongCount);
   const speakWord = getQuestionSpeakWord(question);
+  const completedSentence = feedback
+    ? getCompletedSentence(question, feedback.correctAnswer)
+    : "";
   const progress =
     questions.length === 0
       ? 100
@@ -277,9 +285,35 @@ export function PracticePage({
               </div>
 
               {feedback ? (
-                <section className="mt-6 rounded-md bg-coral-soft p-4 text-sm leading-6 text-coral-strong">
-                  <p className="font-bold">正确答案：{feedback.correctAnswer}</p>
-                  <p className="mt-1">{feedback.explain}</p>
+                <section
+                  className={`mt-6 rounded-md border p-4 text-sm leading-6 ${
+                    feedback.correct
+                      ? "border-teal-200 bg-teal-50 text-teal-900"
+                      : "border-coral/40 bg-coral-soft text-coral-strong"
+                  }`}
+                >
+                  <p className="font-black">
+                    {feedback.correct ? "回答正确" : "这题答错了"}
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    <AnswerDetail label="正确答案" value={feedback.correctAnswer} />
+                    {completedSentence ? (
+                      <AnswerDetail label="完整句子" value={completedSentence} />
+                    ) : null}
+                    {question.module === "reading" && question.passage ? (
+                      <AnswerDetail label="阅读原文" value={question.passage} />
+                    ) : null}
+                    {question.module === "reading" && question.vocabulary?.length ? (
+                      <AnswerDetail
+                        label="重点词义"
+                        value={question.vocabulary.join("；")}
+                      />
+                    ) : null}
+                    <AnswerDetail
+                      label={question.module === "reading" ? "阅读释义与解析" : "答案解析"}
+                      value={feedback.explain}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={onNext}
@@ -294,6 +328,15 @@ export function PracticePage({
         )}
       </section>
     </main>
+  );
+}
+
+function AnswerDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-bold text-current/70">{label}</p>
+      <p className="mt-0.5 break-words font-semibold text-current">{value}</p>
+    </div>
   );
 }
 
