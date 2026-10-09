@@ -110,6 +110,7 @@ export type ProgressItem = {
 
 export type Feedback = {
   correct: boolean;
+  skipped?: boolean;
   correctAnswer: string;
   explain: string;
 };
@@ -133,6 +134,7 @@ export type DiagnosticPlan = {
   currentIndex?: number;
   correctCount?: number;
   wrongCount?: number;
+  skippedCount?: number;
   questions: PracticeItem[];
   learningState: StudentLearningState;
 };

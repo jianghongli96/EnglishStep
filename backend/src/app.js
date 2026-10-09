@@ -73,6 +73,48 @@ const dailyTaskPlan = [
     target: 6,
   },
 ];
+const beginnerStarterWords = [
+  "name",
+  "can",
+  "shop",
+  "book",
+  "school",
+  "student",
+  "teacher",
+  "friend",
+  "family",
+  "home",
+  "room",
+  "class",
+  "pen",
+  "pencil",
+  "bag",
+  "desk",
+  "chair",
+  "hello",
+  "good",
+  "yes",
+  "no",
+  "please",
+  "go",
+  "come",
+  "look",
+  "see",
+  "like",
+  "want",
+  "boy",
+  "girl",
+  "day",
+  "time",
+  "food",
+  "water",
+  "apple",
+  "big",
+  "small",
+  "happy",
+  "new",
+  "old",
+];
 
 await mkdir(DATA_DIR, { recursive: true });
 const isNewDatabase = !existsSync(DB_PATH);
@@ -1443,6 +1485,15 @@ function getStudentCurriculumProfile(studentId) {
   };
 }
 
+function usesBeginnerStarterSequence(curriculum) {
+  return (
+    curriculum.grade === 7 &&
+    curriculum.level === "low" &&
+    curriculum.targetDifficulty === 1 &&
+    curriculum.learnedVocabularyCount < beginnerStarterWords.length
+  );
+}
+
 function getPracticeSession(sessionId) {
   return db
     .prepare("SELECT * FROM practice_sessions WHERE id = ?")
@@ -1615,6 +1666,8 @@ function selectReinforcementRows(studentId, limit, excludedIds = []) {
 }
 
 function selectNewDailyRows(studentId, limit, excludedIds = []) {
+  const curriculum = getStudentCurriculumProfile(studentId);
+  const useBeginnerSequence = usesBeginnerStarterSequence(curriculum);
   const moduleTargets = [
     ["words", Math.ceil(limit * 0.6)],
     ["grammar", Math.floor(limit * 0.25)],
@@ -1625,7 +1678,10 @@ function selectNewDailyRows(studentId, limit, excludedIds = []) {
     if (target <= 0) continue;
     const vocabularyIds =
       module === "words"
-        ? listStudyVocabulary(studentId, Math.max(target * 4, 20)).map((item) => item.id)
+        ? listStudyVocabulary(
+            studentId,
+            useBeginnerSequence ? Math.max(target, 4) : Math.max(target * 4, 20),
+          ).map((item) => item.id)
         : [];
     const rows = selectRecommendedQuestionRows(
       studentId,
@@ -1833,6 +1889,12 @@ function recommendQuestions(studentId, module, limit = 5, vocabularyIds = []) {
 function recommendSpellingQuestions(studentId, limit = 10) {
   ensureSpellingQuestions();
   const curriculum = getStudentCurriculumProfile(studentId);
+  const starterVocabularyIds = usesBeginnerStarterSequence(curriculum)
+    ? listStudyVocabulary(studentId, Math.max(limit, 10)).map((item) => item.id)
+    : [];
+  const starterFilter = starterVocabularyIds.length
+    ? `AND q.vocabulary_id IN (${starterVocabularyIds.map(() => "?").join(",")})`
+    : "";
   const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const now = new Date().toISOString();
   return db
@@ -1871,6 +1933,7 @@ function recommendSpellingQuestions(studentId, limit = 10) {
             AND future_mistake.next_review_at > ?
         )
         AND (v.grade = ? OR (' ' || COALESCE(v.tag, '') || ' ') LIKE ?)
+        ${starterFilter}
         AND CASE
               WHEN v.bnc > 0 AND v.frq > 0 THEN MIN(v.bnc, v.frq)
               WHEN v.bnc > 0 THEN v.bnc
@@ -1898,6 +1961,7 @@ function recommendSpellingQuestions(studentId, limit = 10) {
       now,
       curriculum.stage,
       `% ${curriculum.stageTag} %`,
+      ...starterVocabularyIds,
       curriculum.frequencyCeiling,
       curriculum.targetDifficulty,
       limit,
@@ -2536,7 +2600,10 @@ function diagnosticSessionPayload(session) {
     status: session.status,
     currentIndex: currentIndex === -1 ? rows.length : currentIndex,
     correctCount: attempts.filter((attempt) => Number(attempt.correct) === 1).length,
-    wrongCount: attempts.filter((attempt) => Number(attempt.correct) === 0).length,
+    wrongCount: attempts.filter(
+      (attempt) => Number(attempt.correct) === 0 && Number(attempt.skipped) === 0,
+    ).length,
+    skippedCount: attempts.filter((attempt) => Number(attempt.skipped) === 1).length,
     questions: rows.map((row) => publicQuestion(rowToQuestion(row, false))),
     learningState: ensureStudentLearningState(session.student_id),
   };
@@ -2585,7 +2652,8 @@ function getOrCreateDiagnosticSession(studentId) {
 function completeDiagnostic(session, now) {
   const attempts = db
     .prepare(
-      `SELECT da.correct, q.module
+      `SELECT da.answer, da.correct, da.skipped,
+              q.module, q.options_json
        FROM diagnostic_attempts da
        JOIN questions q ON q.id = da.question_id
        WHERE da.session_id = ?`,
@@ -2598,14 +2666,35 @@ function completeDiagnostic(session, now) {
       (rows.filter((attempt) => Number(attempt.correct) === 1).length / rows.length) * 100,
     );
   };
-  const totalScore = attempts.length
+  let totalScore = attempts.length
     ? Math.round(
         (attempts.filter((attempt) => Number(attempt.correct) === 1).length /
           attempts.length) *
           100,
       )
     : 0;
-  const vocabularyScore = scoreFor("words");
+  let vocabularyScore = scoreFor("words");
+  const answeredChoices = attempts
+    .filter((attempt) => Number(attempt.skipped) === 0)
+    .map((attempt) =>
+      parseJson(attempt.options_json, []).findIndex(
+        (option) => normalizeAnswer(option) === normalizeAnswer(attempt.answer),
+      ),
+    )
+    .filter((index) => index >= 0);
+  const choiceCounts = answeredChoices.reduce((counts, index) => {
+    counts.set(index, (counts.get(index) || 0) + 1);
+    return counts;
+  }, new Map());
+  const dominantChoiceCount = Math.max(0, ...choiceCounts.values());
+  const repeatedChoicePattern =
+    answeredChoices.length >= 8 && dominantChoiceCount / answeredChoices.length >= 0.7;
+  const skippedCount = attempts.filter((attempt) => Number(attempt.skipped) === 1).length;
+  const mostlySkipped = attempts.length > 0 && skippedCount / attempts.length >= 0.4;
+  if (repeatedChoicePattern || mostlySkipped) {
+    totalScore = Math.min(totalScore, 44);
+    vocabularyScore = Math.min(vocabularyScore, 29);
+  }
   const initial = initialLearningState(findStudent(session.student_id));
   const frontierFactor =
     vocabularyScore < 30
@@ -2682,15 +2771,29 @@ async function handleDiagnosticAttempt(req, res) {
     return;
   }
 
-  const answer = normalizeText(body.answer || "");
-  const correct = normalizeAnswer(answer) === normalizeAnswer(question.answer);
+  const skipped = Boolean(body.skipped);
+  const answer = skipped ? "__skipped__" : normalizeText(body.answer || "");
+  if (!skipped && !answer) {
+    badRequest(res, "answer is required unless the question is skipped");
+    return;
+  }
+  const correct = !skipped && normalizeAnswer(answer) === normalizeAnswer(question.answer);
   const now = new Date().toISOString();
   withTransaction(() => {
     db.prepare(
       `INSERT INTO diagnostic_attempts
-        (id, session_id, student_id, question_id, answer, correct, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(randomUUID(), session.id, student.id, question.id, answer, correct ? 1 : 0, now);
+        (id, session_id, student_id, question_id, answer, correct, skipped, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      randomUUID(),
+      session.id,
+      student.id,
+      question.id,
+      answer,
+      correct ? 1 : 0,
+      skipped ? 1 : 0,
+      now,
+    );
     const completed = db
       .prepare("SELECT COUNT(*) AS total FROM diagnostic_attempts WHERE session_id = ?")
       .get(session.id);
@@ -2705,6 +2808,7 @@ async function handleDiagnosticAttempt(req, res) {
   send(res, 201, {
     result: {
       correct,
+      skipped,
       correctAnswer: question.answer,
       explain: question.explain,
     },
@@ -2841,7 +2945,7 @@ function updateStudentMemoryItem(
     .get(studentId, itemType, itemKey);
 }
 
-function appendRemediationQuestion(session, question) {
+function scheduleBoundedRemediation(session, question) {
   const memoryKey = serializedMemoryKey(question);
   const existingCount = db
     .prepare(
@@ -2849,7 +2953,18 @@ function appendRemediationQuestion(session, question) {
        WHERE session_id = ? AND is_remediation = 1 AND memory_key = ?`,
     )
     .get(session.id, memoryKey);
-  if (Number(existingCount.total || 0) >= 2) return false;
+  if (Number(existingCount.total || 0) >= 1) return false;
+
+  const replacement = db
+    .prepare(
+      `SELECT * FROM session_questions
+       WHERE session_id = ? AND answered_at IS NULL
+         AND purpose = 'new' AND is_remediation = 0
+       ORDER BY sort_order DESC
+       LIMIT 1`,
+    )
+    .get(session.id);
+  if (!replacement) return false;
 
   const identity = memoryIdentityForQuestion(question);
   const candidate = db
@@ -2878,27 +2993,16 @@ function appendRemediationQuestion(session, question) {
     );
   if (!candidate) return false;
 
-  const last = db
-    .prepare(
-      `SELECT COALESCE(MAX(sort_order), -1) AS last_order
-       FROM session_questions WHERE session_id = ?`,
-    )
-    .get(session.id);
   db.prepare(
-    `INSERT INTO session_questions (
-      id, session_id, question_id, sort_order, purpose,
-      is_remediation, memory_key, answered_at, correct
-    ) VALUES (?, ?, ?, ?, 'reinforcement', 1, ?, NULL, NULL)`,
+    `UPDATE session_questions
+     SET question_id = ?, purpose = 'reinforcement',
+         is_remediation = 1, memory_key = ?
+     WHERE id = ?`,
   ).run(
-    randomUUID(),
-    session.id,
     candidate.id,
-    Number(last.last_order) + 1,
     memoryKey,
+    replacement.id,
   );
-  db.prepare(
-    `UPDATE practice_sessions SET target_count = target_count + 1 WHERE id = ?`,
-  ).run(session.id);
   return true;
 }
 
@@ -3115,8 +3219,8 @@ async function handleAttempt(req, res) {
          WHERE session_id = ? AND question_id = ?`,
       ).run(now, correct ? 1 : 0, practiceSession.id, question.id);
 
-      if (!correct) {
-        appendRemediationQuestion(practiceSession, question);
+      if (!correct && !isRemediation) {
+        scheduleBoundedRemediation(practiceSession, question);
       }
 
       const remaining = db
@@ -3561,6 +3665,56 @@ function listVocabulary(limit = 50) {
 
 function listStudyVocabulary(studentId, limit = 12) {
   const curriculum = getStudentCurriculumProfile(studentId);
+  const useBeginnerSequence = usesBeginnerStarterSequence(curriculum);
+  const starterRows = useBeginnerSequence
+    ? db
+        .prepare(
+          `WITH base AS (
+             SELECT v.*, COALESCE(sk.mastery_level, 0) AS mastery_level,
+                    sk.last_practiced_at,
+                    CASE
+                      WHEN v.bnc > 0 AND v.frq > 0 THEN MIN(v.bnc, v.frq)
+                      WHEN v.bnc > 0 THEN v.bnc
+                      WHEN v.frq > 0 THEN v.frq
+                      ELSE 0
+                    END AS frequency_rank
+             FROM vocabulary v
+             LEFT JOIN student_knowledge sk
+               ON lower(sk.knowledge_point) = lower(v.word)
+               AND sk.student_id = ?
+             WHERE lower(v.word) IN (${beginnerStarterWords.map(() => "?").join(",")})
+               AND (v.grade = ? OR (' ' || COALESCE(v.tag, '') || ' ') LIKE ?)
+           ), ranked AS (
+             SELECT base.*,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY lower(word)
+                      ORDER BY CASE WHEN source_book = 'ECDICT' THEN 1 ELSE 0 END,
+                               CASE WHEN COALESCE(phonetic, '') = '' THEN 1 ELSE 0 END,
+                               created_at ASC
+                    ) AS word_row
+             FROM base
+           )
+           SELECT * FROM ranked WHERE word_row = 1`,
+        )
+        .all(
+          studentId,
+          ...beginnerStarterWords,
+          curriculum.stage,
+          `% ${curriculum.stageTag} %`,
+        )
+        .sort((left, right) => {
+          const masteryDifference =
+            Number(left.mastery_level || 0) - Number(right.mastery_level || 0);
+          if (masteryDifference) return masteryDifference;
+          const practiceDifference =
+            Number(Boolean(left.last_practiced_at)) - Number(Boolean(right.last_practiced_at));
+          if (practiceDifference) return practiceDifference;
+          return (
+            beginnerStarterWords.indexOf(left.word.toLowerCase()) -
+            beginnerStarterWords.indexOf(right.word.toLowerCase())
+          );
+        })
+    : [];
   const rows = db
     .prepare(
       `WITH base AS (
@@ -3602,10 +3756,20 @@ function listStudyVocabulary(studentId, limit = 12) {
       curriculum.stage,
       `% ${curriculum.stageTag} %`,
       curriculum.frequencyCeiling,
-      limit,
+      Math.max(limit, limit * 2),
     );
 
-  return rows.map((row) => ({
+  const mergedRows = [];
+  const seenWords = new Set();
+  for (const row of [...starterRows, ...rows]) {
+    const word = row.word.toLowerCase();
+    if (seenWords.has(word)) continue;
+    seenWords.add(word);
+    mergedRows.push(row);
+    if (mergedRows.length >= limit) break;
+  }
+
+  return mergedRows.map((row) => ({
     ...rowToVocabulary(row),
     masteryLevel: Number(row.mastery_level || 0),
     lastPracticedAt: row.last_practiced_at,

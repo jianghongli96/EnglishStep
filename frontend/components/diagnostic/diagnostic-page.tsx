@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, ChevronRight } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronRight, SkipForward } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { loadCurrentAccount } from "@/lib/account";
@@ -50,9 +50,9 @@ export function DiagnosticPage() {
   const index = diagnostic?.currentIndex || 0;
   const question = diagnostic?.questions[index];
 
-  async function answer(value: string) {
+  async function answer(value: string, skipped = false) {
     if (!diagnostic?.sessionId || !question || submitting || feedback) return;
-    setSelected(value);
+    setSelected(skipped ? "" : value);
     setSubmitting(true);
     setError("");
     try {
@@ -68,11 +68,12 @@ export function DiagnosticPage() {
           sessionId: diagnostic.sessionId,
           questionId: question.id,
           answer: value,
+          skipped,
         }),
       });
       setFeedback(response.result);
       setNextDiagnostic(response.diagnostic);
-      if (response.result.correct) {
+      if (response.result.correct || response.result.skipped) {
         window.setTimeout(() => advance(response.diagnostic), 550);
       }
     } catch (caught) {
@@ -125,7 +126,7 @@ export function DiagnosticPage() {
               后续练习会从这个起点开始，并根据真实答题表现逐步调整。
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <Result label="词频学习边界" value={`前 ${state.frequencyFrontier} 词`} />
+              <Result label="词汇学习起点" value={`入门核心词 + 高频前 ${state.frequencyFrontier} 词`} />
               <Result label="题目难度" value={`第 ${state.questionLevel} 级`} />
               <Result label="词汇诊断" value={`${state.vocabularyScore ?? 0} 分`} />
               <Result label="语法 / 阅读" value={`${state.grammarScore ?? 0} / ${state.readingScore ?? 0} 分`} />
@@ -171,7 +172,7 @@ export function DiagnosticPage() {
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {question.options.map((option) => {
               const isSelected = selected === option;
-              const isAnswer = feedback && option === feedback.correctAnswer;
+              const isAnswer = feedback && !feedback.skipped && option === feedback.correctAnswer;
               const style = isAnswer
                 ? "border-teal-600 bg-teal-50 text-teal-900"
                 : feedback && isSelected
@@ -192,14 +193,31 @@ export function DiagnosticPage() {
               );
             })}
           </div>
+          {!feedback ? (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => void answer("", true)}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-3 text-sm font-semibold text-muted-foreground transition hover:border-primary/60 hover:text-foreground disabled:opacity-60 sm:w-auto"
+            >
+              <SkipForward className="h-4 w-4" aria-hidden="true" />
+              不认识，跳过
+            </button>
+          ) : null}
           {feedback ? (
-            <div className={`mt-5 rounded-md p-4 text-sm ${feedback.correct ? "bg-teal-50 text-teal-900" : "bg-coral-soft text-coral-strong"}`}>
-              <p className="font-bold">{feedback.correct ? "回答正确" : `正确答案：${feedback.correctAnswer}`}</p>
-              {!feedback.correct && feedback.explain ? <p className="mt-2 leading-6">{feedback.explain}</p> : null}
+            <div className={`mt-5 rounded-md p-4 text-sm ${feedback.correct ? "bg-teal-50 text-teal-900" : feedback.skipped ? "bg-muted text-foreground" : "bg-coral-soft text-coral-strong"}`}>
+              <p className="font-bold">
+                {feedback.correct
+                  ? "回答正确"
+                  : feedback.skipped
+                    ? "已记录为不认识"
+                    : `正确答案：${feedback.correctAnswer}`}
+              </p>
+              {!feedback.correct && !feedback.skipped && feedback.explain ? <p className="mt-2 leading-6">{feedback.explain}</p> : null}
             </div>
           ) : null}
           {error ? <p className="mt-4 text-sm text-coral-strong">{error}</p> : null}
-          {feedback && !feedback.correct ? (
+          {feedback && !feedback.correct && !feedback.skipped ? (
             <button
               type="button"
               onClick={() => advance()}

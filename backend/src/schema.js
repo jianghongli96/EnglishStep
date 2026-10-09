@@ -173,6 +173,7 @@ export function initSchema(db) {
       question_id TEXT NOT NULL,
       answer TEXT NOT NULL,
       correct INTEGER NOT NULL,
+      skipped INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       FOREIGN KEY(session_id) REFERENCES diagnostic_sessions(id),
       FOREIGN KEY(student_id) REFERENCES students(id),
@@ -310,6 +311,7 @@ export function initSchema(db) {
 	  ensureColumn(db, "session_questions", "purpose", "TEXT NOT NULL DEFAULT 'new'");
 	  ensureColumn(db, "session_questions", "is_remediation", "INTEGER NOT NULL DEFAULT 0");
 	  ensureColumn(db, "session_questions", "memory_key", "TEXT");
+	  ensureColumn(db, "diagnostic_attempts", "skipped", "INTEGER NOT NULL DEFAULT 0");
 	  ensureColumn(db, "vocabulary", "tag", "TEXT");
 	  ensureColumn(db, "vocabulary", "bnc", "INTEGER NOT NULL DEFAULT 0");
 	  ensureColumn(db, "vocabulary", "frq", "INTEGER NOT NULL DEFAULT 0");
