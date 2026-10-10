@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
+import { Keyboard, Play } from "lucide-react";
 
 import {
   PracticePage,
@@ -869,10 +870,11 @@ export function LearningApp({
                   key={module.id}
                   href={module.href}
                   onClick={(event) => navigateToModule(event, module)}
+                  aria-current={activeModule === module.id ? "page" : undefined}
                   className={`min-w-0 rounded-md border px-3 py-2.5 text-left transition sm:py-3 lg:w-auto ${
                     activeModule === module.id
-                      ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                      : "border-border bg-card hover:border-primary/45"
+                      ? "border-slate-300 bg-slate-100 text-slate-950 shadow-sm"
+                      : "border-transparent bg-transparent text-muted-foreground hover:border-border hover:bg-card hover:text-foreground"
                   }`}
                 >
                   <span className="block whitespace-nowrap text-sm font-semibold">
@@ -881,7 +883,7 @@ export function LearningApp({
                   <span
                     className={`mt-1 hidden text-xs sm:block ${
                       activeModule === module.id
-                        ? "text-primary-foreground/78"
+                        ? "text-slate-600"
                         : "text-muted-foreground"
                     }`}
                   >
@@ -969,7 +971,7 @@ export function LearningApp({
 
           {activeModule === "daily" && !loading && student && canViewActiveModule ? (
             <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
-              <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                 <div>
                   <p className="text-sm font-semibold text-teal-700">
                     今日推荐
@@ -978,7 +980,16 @@ export function LearningApp({
                     15 分钟基础巩固
                   </h2>
                 </div>
-                <span className="w-full rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => void startDailyPractice()}
+                  disabled={!student || dailyLoading}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:py-2.5"
+                >
+                  <Play className="h-4 w-4" aria-hidden="true" />
+                  {dailyLoading ? "正在准备题目" : "进入今日任务练习"}
+                </button>
+                <span className="rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground sm:col-span-2 sm:w-fit">
                   来自后端的个性化任务
                 </span>
               </div>
@@ -1028,14 +1039,6 @@ export function LearningApp({
                   </article>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={() => void startDailyPractice()}
-                disabled={!student || dailyLoading}
-                className="mt-5 w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {dailyLoading ? "正在准备题目" : "进入今日任务练习"}
-              </button>
             </section>
           ) : null}
 
@@ -1099,8 +1102,9 @@ export function LearningApp({
                   type="button"
                   onClick={startMistakePractice}
                   disabled={dueMistakeCount === 0 || dailyLoading}
-                  className="w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:py-2"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:py-2.5"
                 >
+                  <Play className="h-4 w-4" aria-hidden="true" />
                   {dailyLoading ? "准备中" : "复习今天到期的错题"}
                 </button>
               </div>
@@ -1667,36 +1671,38 @@ function ModuleOverview({
 
   return (
     <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
         <div>
           <p className="text-sm font-semibold text-teal-700">
             {moduleLabels[module]}
           </p>
           <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">{title}</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
         </div>
         <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col">
+          <button
+            type="button"
+            onClick={onStart}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:py-2.5"
+          >
+            <Play className="h-4 w-4" aria-hidden="true" />
+            {loading ? "准备中" : buttonText}
+          </button>
           {onStartSpelling ? (
             <button
               type="button"
               onClick={onStartSpelling}
               disabled={loading}
-              className="rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60 sm:py-2"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-3 text-sm font-semibold transition hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60 sm:py-2.5"
             >
-              {loading ? "准备中" : "开启拼写练习"}
+              <Keyboard className="h-4 w-4" aria-hidden="true" />
+              {loading ? "准备中" : "拼写练习"}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={onStart}
-            disabled={loading}
-            className="rounded-md border border-border bg-card px-4 py-3 text-sm font-semibold shadow-sm transition hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60 sm:py-2"
-          >
-            {loading ? "准备中" : buttonText}
-          </button>
         </div>
+        <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:col-span-2">
+          {description}
+        </p>
       </div>
 
       <div className="mt-5 grid grid-cols-[repeat(3,minmax(0,1fr))] gap-2 sm:gap-3">
